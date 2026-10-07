@@ -1141,10 +1141,12 @@ test("pod logs: a crashing pod opens its previous run, secret values are masked;
   await expect(page.getByTestId("domain-result")).toContainText(/DNS|host/);                        // сервер отверг имя — причина показана
   await page.getByTestId("domain-host").fill("App.Test.Example.com");
   await page.getByTestId("domain-save").click();
+  await expect(page.locator("dialog[open]")).toHaveCount(0);                                         // диалог закрывается после ответа сервера: ждём, иначе он перекрывает следующий клик
   await page.getByTestId("env-domain-prod").click();
   await expect(page.getByTestId("domain-host")).toHaveValue("app.test.example.com");
   await page.screenshot({ path: `${SHOTS}/26-domain.png`, fullPage: true });
   await page.getByTestId("domain-remove").click();
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
   await page.getByTestId("env-domain-prod").click();
   await expect(page.getByTestId("domain-host")).toHaveValue("");
   expect(errors.filter((e) => !/422/.test(e))).toEqual([]);                                          // 422 на заведомо неверное имя домена — ожидаемо
