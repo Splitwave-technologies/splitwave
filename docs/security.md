@@ -12,7 +12,7 @@ What the platform does to protect your systems, and what remains your job.
 - **Outbound requests are guarded** (repository wizard, connection check, notifications, SIEM): public addresses only, no redirects, bounded sizes and call rates.
 - **Previews are isolated**: pull requests from forks are never built; base secrets are not copied into previews.
 - **Servers with an agent** connect out to the platform over HTTPS: no inbound port on the server. Tokens are stored as hashes and the content of a job is erased when it finishes.
-- **No telemetry, offline licence check, optional update notice (a plain GET of a public file once a day; `UPDATE_CHECK=false` disables it).** The licence signing key is kept in a separate isolated component with no internet access, not in the web application.
+- **No telemetry, offline licence check, optional update notice (a plain GET of a public file once a day; `UPDATE_CHECK=false` disables it).**
 
 ## What stays with you
 
