@@ -1,0 +1,31 @@
+# Дополнительные права для платной функции «временные среды под PR»: создавать и удалять Deployment, Service и Secret
+# в namespace приложения. Применять ТОЛЬКО там, где включены превью:
+#   sed 's/NAMESPACE/my-app/g' namespace-access-previews.yaml | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-plane-previews
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane-previews
+  namespace: NAMESPACE
+subjects:
+  - kind: ServiceAccount
+    name: control-plane-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: control-plane-previews
+  apiGroup: rbac.authorization.k8s.io

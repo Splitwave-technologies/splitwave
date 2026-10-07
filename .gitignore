@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+*.log
+node_modules/
+.next/
+dist/
+.DS_Store
+kubeconfig
+*.kubeconfig

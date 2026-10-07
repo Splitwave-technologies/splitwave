@@ -1,0 +1,49 @@
+# Доступ платформы к namespace приложения (минимальные права: только этот namespace).
+# Подключение нового namespace: подставить имя вместо NAMESPACE и применить
+#   sed 's/NAMESPACE/my-app/g' namespace-access.yaml | kubectl apply -f -
+# ClusterRole создаётся один раз; RoleBinding — в каждом namespace, где платформа деплоит приложения.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-plane-deployer
+rules:
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["kpack.io"]
+    resources: ["builds"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  # доступ kpack к приватным репозиториям: секрет git-<проект> подключается к ServiceAccount сборки
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "patch"]
+  # сборка по Dockerfile: одноразовые задания kaniko в namespace приложения (включая чтение хода сборки)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane-deployer
+  namespace: NAMESPACE
+subjects:
+  - kind: ServiceAccount
+    name: control-plane-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: control-plane-deployer
+  apiGroup: rbac.authorization.k8s.io

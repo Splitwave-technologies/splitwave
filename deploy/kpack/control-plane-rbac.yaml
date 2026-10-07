@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: control-plane-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: control-plane-role
+  namespace: default
+rules:
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["kpack.io"]
+    resources: ["builds"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+  # доставка секретов проекта (только объекты, которыми владеет платформа)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  # сборка по Dockerfile: одноразовые задания kaniko
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]
+  # доступ kpack к приватным репозиториям: секрет git-<проект> подключается к ServiceAccount сборки
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: control-plane-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: control-plane-role
+  apiGroup: rbac.authorization.k8s.io

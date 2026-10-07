@@ -1,0 +1,75 @@
+{{- if and .Values.postgresql.enabled .Values.postgresql.backup.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "dsp.fullname" . }}-backups
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+  annotations:
+    # hook только при первой установке: PVC привязывается лишь при первом запуске задачи (WaitForFirstConsumer),
+    # а helm --wait ждал бы этого вечно. Том сохраняется при uninstall.
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: never
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.postgresql.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.backup.storage }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "dsp.fullname" . }}-backup
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgresql.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels: {{- include "dsp.backupSelector" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: pg-dump
+              image: {{ .Values.postgresql.image }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              envFrom:
+                - secretRef:
+                    name: {{ include "dsp.pgSecretName" . }}
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "dsp.pgSecretName" . }}
+                      key: POSTGRES_PASSWORD
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  FILE=/backups/platform-$(date +%Y%m%d-%H%M%S).sql.gz
+                  pg_dump -h {{ include "dsp.pgHost" . }} -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$FILE"
+                  echo "Backup written: $FILE"
+                  find /backups -name '*.sql.gz' -mtime +{{ .Values.postgresql.backup.retentionDays }} -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ include "dsp.fullname" . }}-backups
+{{- end }}

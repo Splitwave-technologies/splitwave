@@ -1,0 +1,146 @@
+{{- if .Values.rbac.create }}
+{{- $root := . }}
+{{- $namespaces := append .Values.rbac.deployNamespaces .Release.Namespace | uniq }}
+{{- range $ns := $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "dsp.fullname" $root }}
+  namespace: {{ $ns }}
+  labels: {{- include "dsp.labels" $root | nindent 4 }}
+rules:
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["kpack.io"]
+    resources: ["builds"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: {{ if $root.Values.rbac.previews }}["get", "create", "patch", "delete"]{{ else }}["get", "patch"]{{ end }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: {{ if $root.Values.rbac.previews }}["get", "create", "update", "patch", "delete"]{{ else }}["get", "create", "update", "patch"]{{ end }}
+{{- if $root.Values.rbac.previews }}
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+{{- end }}
+{{- if or $root.Values.provisioner.enabled $root.Values.rbac.manageIngress }}
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "create", "update", "delete"]      # привязка домена к приложению (PUT .../environments/<env>/domain)
+{{- end }}
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]                       # платформа читает ход сборки kaniko через подресурс status
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "dsp.fullname" $root }}
+  namespace: {{ $ns }}
+  labels: {{- include "dsp.labels" $root | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "dsp.fullname" $root }}
+    namespace: {{ $root.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "dsp.fullname" $root }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+---
+# Роль «деплоера» для мастера подключения: сама по себе ничего не даёт — действует только там, где на неё создан RoleBinding
+# (мастер создаёт его в namespace нового приложения; администратор — командой kubectl apply из YAML мастера).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "dsp.fullname" . }}-deployer
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["kpack.io"]
+    resources: ["builds"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: {{ if .Values.rbac.previews }}["get", "create", "patch", "delete"]{{ else }}["get", "patch"]{{ end }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: {{ if .Values.rbac.previews }}["get", "create", "update", "patch", "delete"]{{ else }}["get", "create", "update", "patch"]{{ end }}
+{{- if .Values.rbac.previews }}
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+{{- end }}
+{{- if or .Values.provisioner.enabled .Values.rbac.manageIngress }}
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "create", "update", "delete"]      # привязка домена к приложению (PUT .../environments/<env>/domain)
+{{- end }}
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]                       # платформа читает ход сборки kaniko через подресурс status
+{{- if .Values.provisioner.enabled }}
+---
+# ВНИМАНИЕ: право создавать Deployment во всём кластере позволяет запустить в нём любой образ. Включайте осознанно (provisioner.enabled).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "dsp.fullname" . }}-provisioner
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "services"]
+    verbs: ["get", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["create"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["create"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["bind"]
+    resourceNames: ["{{ include "dsp.fullname" . }}-deployer"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "dsp.fullname" . }}-provisioner
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "dsp.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "dsp.fullname" . }}-provisioner
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

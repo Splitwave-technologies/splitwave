@@ -1,0 +1,132 @@
+# ── Образ ───────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/splitwave-technologies/control-plane   # приватный образ: нужен imagePullSecrets (ниже); замените на свой реестр/образ
+  tag: ""            # по умолчанию appVersion чарта
+  digest: ""         # если задан — используется вместо tag (sha256:...)
+  pullPolicy: IfNotPresent
+imagePullSecrets: []  # приватный реестр: kubectl create secret docker-registry regcred --docker-server=ghcr.io \
+                      #   --docker-username=<user> --docker-password=<токен с read:packages>; затем [{name: regcred}]
+
+replicaCount: 1       # сборки идут внутри процесса — держите 1 реплику
+
+# ── Настройки платформы ─────────────────────────────────────────────────
+config:
+  defaultNamespace: default          # namespace по умолчанию для Image kpack
+  defaultBuilder: default            # имя ClusterBuilder
+  registryPrefix: ghcr.io/example    # куда kpack публикует собранные образы (нужны учётные данные в ServiceAccount kpack)
+  buildTimeoutSeconds: 900
+  buildNamespace: ""                 # где собираются образы (пусто — defaultNamespace); туда же нужен rbac.deployNamespaces
+  kaniko:                            # сборка по Dockerfile (kaniko)
+    registrySecret: ""               # Secret dockerconfigjson с правом записи в реестр образов (пусто — ghcr-creds)
+    insecureRegistries: ""           # реестры без TLS через запятую (например реестр внутри кластера: registry.registry.svc.cluster.local:5000)
+    cpu: ""                          # запрос CPU задания сборки (пусто — 1)
+    memory: ""                       # запрос памяти (пусто — 2Gi)
+    memoryLimit: ""                  # предел памяти (пусто — 4Gi)
+
+# ── Учётные записи и сессии ──
+auth:
+  require2fa: false          # true: пользователь без 2FA после входа может только настроить её
+  cookieSecure: ""           # "true" за HTTPS (рекомендуется); пусто — по схеме запроса (с учётом доверенного прокси)
+  trustedProxies: ""         # сети CIDR прокси/ingress, которым верим в X-Forwarded-For/-Proto (например "10.42.0.0/16"); пусто — не верим никому
+  sessionTtlHours: 12        # абсолютный срок сессии
+  sessionIdleMinutes: 60     # завершать сессию после стольких минут без активности
+  loginMaxFailures: 5        # неудачных входов на имя за 15 минут до временной блокировки
+
+# ── Секреты. Пустые значения генерируются при первой установке и сохраняются при upgrade.
+# Секрет помечен helm.sh/resource-policy=keep: при helm uninstall ключи НЕ удаляются
+# (иначе зашифрованные секреты в базе стали бы нечитаемыми).
+secrets:
+  existingSecret: ""        # своя Secret с ключами ADMIN_BOOTSTRAP_TOKEN, SECRET_ENCRYPTION_KEY,
+                            # GITHUB_WEBHOOK_SECRET, DATABASE_URL, LICENSE_KEY (только с внешней БД)
+  adminBootstrapToken: ""   # >= 24 символов
+  secretEncryptionKey: ""   # ключ(и) Fernet; несколько через запятую для ротации
+  githubWebhookSecret: ""
+  licenseKey: ""            # лицензионный ключ платных функций (пусто = Community)
+  scmGithubToken: ""        # необязательно: токен ТОЛЬКО на чтение публичных репозиториев GitHub для мастера подключения (без него лимит 60 запросов/час)
+  scmGitlabToken: ""        # то же для gitlab.com
+
+# ── Платные функции (нужен образ платной редакции: image.repository=.../control-plane-pro и действующий secrets.licenseKey) ──
+sso:                          # единый вход по OpenID Connect (лицензия: sso)
+  enabled: false
+  issuer: ""                  # https://idp.example.com/realms/acme
+  clientId: ""
+  clientSecret: ""            # хранится в Secret чарта (или ключ SSO_CLIENT_SECRET в secrets.existingSecret)
+  redirectUri: ""             # https://<хост платформы>/api/sso/callback — должен совпадать с настройкой провайдера
+  name: "SSO"                 # подпись кнопки на странице входа
+  scopes: "openid email profile"
+  groupClaim: groups
+  roleMap: ""                 # JSON: {"platform-admins":"admin","devops":"devops"}; пусто — роль остаётся none до назначения
+  defaultRole: none
+  allowedDomains: ""          # example.com,corp.example
+  allowPrivate: false         # true: провайдер во внутренней сети (Keycloak в кластере)
+  allowHttp: false
+siem:                         # экспорт аудита (лицензия: siem); назначения задаются в интерфейсе
+  intervalSeconds: 10
+  denyPrivate: false          # true: запретить частные адреса приёмников
+  allowHttp: false            # true: разрешить http:// для HEC/HTTP-приёмников
+previews:                     # временные среды под PR (лицензия: preview_envs); включаются по проектам в интерфейсе
+  maxPerProject: 5
+  ttlHours: 168
+  # права на создание Deployment/Service в namespace приложения: rbac.previews=true
+
+# ── PostgreSQL ──────────────────────────────────────────────────────────
+postgresql:
+  enabled: true             # false — использовать внешнюю БД (external.url)
+  image: postgres:16-alpine
+  password: ""              # пусто = сгенерировать
+  storage: 5Gi
+  storageClass: ""          # пусто = класс по умолчанию
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+  external:
+    url: ""                 # postgresql+psycopg2://user:pass@host:5432/db
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retentionDays: 14
+    storage: 5Gi
+
+# ── Доступ платформы к namespace приложений (минимальные права: Role на каждый namespace) ──
+rbac:
+  manageIngress: false      # право платформы создавать/менять/удалять Ingress приложений (смена домена); включено и при provisioner.enabled
+  create: true
+  deployNamespaces: []      # namespace, где платформа может деплоить приложения и создавать Secret
+  previews: false           # true: права создавать/удалять Deployment и Service (нужно платной функции «временные среды под PR»)
+
+# ── Мастер подключения проекта (Проекты → Подключить репозиторий) ──
+onboarding:
+  ingressClass: ""            # класс Ingress для создаваемых приложений (пусто — класс по умолчанию кластера)
+  tls: ""                     # HTTPS для Ingress приложений: "" (нет) | auto (Let's Encrypt через резолвер Traefik) | custom (свой сертификат, см. docs/INSTALL.md)
+  certResolver: "le"          # имя резолвера ACME в Traefik (для tls=auto)
+  tlsSecret: ""               # секрет kubernetes.io/tls в namespace приложения (для контроллеров без общего хранилища сертификатов)
+  ingressAnnotations: ""      # JSON-объект дополнительных аннотаций Ingress приложений
+  appPullSecret: ""           # Secret с доступом к реестру образов в namespace платформы: копируется в namespace каждого нового приложения
+  placeholderImage: ""        # образ-заглушка до первого выката (пусто — registry.k8s.io/pause)
+  allowPrivateGitHosts: false # true: Git-серверы во внутренней сети (самохостинг GitLab / Gitea)
+provisioner:
+  enabled: false              # true: платформа сама создаёт namespace, доступ, Deployment, Service и Ingress для новых приложений.
+                              # ВНИМАНИЕ: это право создавать Deployment во всём кластере (см. docs/onboarding.md). false (по умолчанию):
+                              # мастер показывает готовый YAML, который администратор применяет командой kubectl apply.
+
+# ── Сеть ────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls: []                   # [{secretName: ..., hosts: [...]}]
+networkPolicy:
+  enabled: true             # API доступен только из этого namespace и перечисленных; БД — только из платформы
+  allowFromNamespaces: [kube-system]   # например namespace ingress-контроллера
+
+# ── Безопасность подов и ресурсы ────────────────────────────────────────
+podSecurityContext:
+  runAsUser: 1002           # пользователь cnb в образах Paketo (числовой uid нужен для runAsNonRoot)
+  runAsGroup: 1000
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {memory: 512Mi}

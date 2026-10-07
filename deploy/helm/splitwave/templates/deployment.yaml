@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dsp.fullname" . }}
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate          # одна реплика: сборки идут внутри процесса, двух копий одновременно быть не должно
+  selector:
+    matchLabels: {{- include "dsp.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "dsp.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s%s" (toJson .Values.config) .Values.secrets.existingSecret .Values.image.digest | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "dsp.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podSecurityContext.runAsUser }}
+        runAsGroup: {{ .Values.podSecurityContext.runAsGroup }}
+        seccompProfile: {type: RuntimeDefault}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        - name: wait-for-db
+          image: {{ .Values.postgresql.image }}
+          command: ["sh", "-c", "until pg_isready -h {{ include "dsp.pgHost" . }} -p 5432 -U platform; do echo waiting for database; sleep 2; done"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            limits: {memory: 64Mi}
+      {{- end }}
+      containers:
+        - name: control-plane
+          image: {{ include "dsp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: {{ include "dsp.secretName" . }}
+          env:
+            {{- if .Values.postgresql.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dsp.pgSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql+psycopg2://platform:$(POSTGRES_PASSWORD)@{{ include "dsp.pgHost" . }}:5432/platform"
+            {{- end }}
+            - {name: DEFAULT_NAMESPACE, value: {{ .Values.config.defaultNamespace | quote }}}
+            - {name: DEFAULT_BUILDER, value: {{ .Values.config.defaultBuilder | quote }}}
+            - {name: REGISTRY_PREFIX, value: {{ .Values.config.registryPrefix | quote }}}
+            - {name: BUILD_TIMEOUT_SECONDS, value: {{ .Values.config.buildTimeoutSeconds | quote }}}
+            {{- with .Values.config.buildNamespace }}
+            - {name: BUILD_NAMESPACE, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.config.kaniko.registrySecret }}
+            - {name: KANIKO_REGISTRY_SECRET, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.config.kaniko.insecureRegistries }}
+            - {name: KANIKO_INSECURE_REGISTRIES, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.config.kaniko.cpu }}
+            - {name: KANIKO_CPU, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.config.kaniko.memory }}
+            - {name: KANIKO_MEMORY, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.config.kaniko.memoryLimit }}
+            - {name: KANIKO_MEMORY_LIMIT, value: {{ . | quote }}}
+            {{- end }}
+            - {name: REQUIRE_2FA, value: {{ .Values.auth.require2fa | quote }}}
+            {{- if .Values.sso.enabled }}
+            - {name: SSO_ISSUER, value: {{ required "sso.issuer is required" .Values.sso.issuer | quote }}}
+            - {name: SSO_CLIENT_ID, value: {{ required "sso.clientId is required" .Values.sso.clientId | quote }}}
+            - {name: SSO_REDIRECT_URI, value: {{ required "sso.redirectUri is required" .Values.sso.redirectUri | quote }}}
+            - {name: SSO_NAME, value: {{ .Values.sso.name | quote }}}
+            - {name: SSO_SCOPES, value: {{ .Values.sso.scopes | quote }}}
+            - {name: SSO_GROUP_CLAIM, value: {{ .Values.sso.groupClaim | quote }}}
+            - {name: SSO_ROLE_MAP, value: {{ .Values.sso.roleMap | quote }}}
+            - {name: SSO_DEFAULT_ROLE, value: {{ .Values.sso.defaultRole | quote }}}
+            - {name: SSO_ALLOWED_DOMAINS, value: {{ .Values.sso.allowedDomains | quote }}}
+            - {name: SSO_ALLOW_PRIVATE, value: {{ .Values.sso.allowPrivate | quote }}}
+            - {name: SSO_ALLOW_HTTP, value: {{ .Values.sso.allowHttp | quote }}}
+            - name: SSO_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: {{ include "dsp.secretName" . }}, key: SSO_CLIENT_SECRET, optional: true}}
+            {{- end }}
+            - {name: SIEM_INTERVAL_SECONDS, value: {{ .Values.siem.intervalSeconds | quote }}}
+            - {name: SIEM_DENY_PRIVATE, value: {{ .Values.siem.denyPrivate | quote }}}
+            - {name: SIEM_ALLOW_HTTP, value: {{ .Values.siem.allowHttp | quote }}}
+            - {name: PREVIEW_MAX_PER_PROJECT, value: {{ .Values.previews.maxPerProject | quote }}}
+            - {name: PREVIEW_TTL_HOURS, value: {{ .Values.previews.ttlHours | quote }}}
+            - name: SCM_GITHUB_TOKEN
+              valueFrom: {secretKeyRef: {name: {{ include "dsp.secretName" . }}, key: SCM_GITHUB_TOKEN, optional: true}}
+            - name: SCM_GITLAB_TOKEN
+              valueFrom: {secretKeyRef: {name: {{ include "dsp.secretName" . }}, key: SCM_GITLAB_TOKEN, optional: true}}
+            - {name: PLATFORM_NAMESPACE, value: {{ .Release.Namespace | quote }}}
+            - {name: PLATFORM_SERVICE_ACCOUNT, value: {{ include "dsp.fullname" . | quote }}}
+            - {name: DEPLOYER_CLUSTER_ROLE, value: {{ printf "%s-deployer" (include "dsp.fullname" .) | quote }}}
+            {{- with .Values.onboarding.ingressClass }}
+            - {name: INGRESS_CLASS, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.tls }}
+            - {name: INGRESS_TLS, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.certResolver }}
+            - {name: INGRESS_CERT_RESOLVER, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.tlsSecret }}
+            - {name: INGRESS_TLS_SECRET, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.ingressAnnotations }}
+            - {name: INGRESS_ANNOTATIONS, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.appPullSecret }}
+            - {name: APP_PULL_SECRET, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.onboarding.placeholderImage }}
+            - {name: PLACEHOLDER_IMAGE, value: {{ . | quote }}}
+            {{- end }}
+            {{- if .Values.onboarding.allowPrivateGitHosts }}
+            - {name: SCM_ALLOW_PRIVATE_HOSTS, value: "true"}
+            {{- end }}
+            {{- with .Values.auth.trustedProxies }}
+            - {name: TRUSTED_PROXIES, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.auth.cookieSecure }}
+            - {name: COOKIE_SECURE, value: {{ . | quote }}}
+            {{- end }}
+            - {name: SESSION_TTL_HOURS, value: {{ .Values.auth.sessionTtlHours | quote }}}
+            - {name: SESSION_IDLE_MINUTES, value: {{ .Values.auth.sessionIdleMinutes | quote }}}
+            - {name: LOGIN_MAX_FAILURES, value: {{ .Values.auth.loginMaxFailures | quote }}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - {name: tmp, emptyDir: {}}

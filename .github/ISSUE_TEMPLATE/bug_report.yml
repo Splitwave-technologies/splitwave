@@ -1,0 +1,15 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes: { label: Version, description: "Image tag or commit" }
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "What you did, what you expected and what you saw. Remove secrets from logs." }
+    validations: { required: true }
+  - type: dropdown
+    id: where
+    attributes: { label: Where do you run it, options: [Single server install script, Existing Kubernetes cluster, Other] }

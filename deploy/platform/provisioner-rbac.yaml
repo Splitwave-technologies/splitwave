@@ -1,0 +1,43 @@
+# НЕОБЯЗАТЕЛЬНО. Разрешает платформе самой создавать приложения для мастера подключения: namespace, доступ платформы к нему,
+# Deployment, Service и Ingress. Без этого файла платформа работает с минимальными правами (только меняет образ у существующих
+# Deployment), а мастер показывает готовый YAML, который администратор применяет вручную командой `kubectl apply -f`.
+#
+# ВНИМАНИЕ: право создавать Deployment по всему кластеру позволяет запустить в нём любой образ. Включайте только если принимаете
+# это (и лучше вместе с Pod Security Admission: мастер ставит на новые namespace уровень baseline). Платформа ничего не
+# перезаписывает и не удаляет: только создаёт объекты, которых ещё нет.
+# Применение:  kubectl apply -f provisioner-rbac.yaml   (после namespace-access.yaml / control-plane-rbac.yaml)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-plane-provisioner
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "services"]
+    verbs: ["get", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["create"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["create"]
+  # выдавать в новом namespace можно только роль control-plane-deployer (get/patch deployments, секреты проекта, kpack)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["bind"]
+    resourceNames: ["control-plane-deployer"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: control-plane-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: control-plane-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: control-plane-provisioner
+  apiGroup: rbac.authorization.k8s.io

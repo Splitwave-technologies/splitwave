@@ -1,0 +1,88 @@
+{{- if .Values.postgresql.enabled }}
+{{- $pgSecret := include "dsp.pgSecretName" . }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $pgSecret }}
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  POSTGRES_USER: platform
+  POSTGRES_DB: platform
+  POSTGRES_PASSWORD: {{ include "dsp.stable" (list . $pgSecret "POSTGRES_PASSWORD" .Values.postgresql.password (randAlphaNum 32)) | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dsp.pgHost" . }}
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "dsp.pgSelector" . | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dsp.pgHost" . }}
+  labels: {{- include "dsp.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "dsp.pgHost" . }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "dsp.pgSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "dsp.pgSelector" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: {{ .Values.postgresql.image }}
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: {{ $pgSecret }}
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U platform -d platform"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources: {{- toYaml .Values.postgresql.resources | nindent 12 }}
+      volumes:
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgresql.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.storage }}
+{{- end }}

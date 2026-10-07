@@ -1,0 +1,18 @@
+SplitWave установлена: релиз {{ .Release.Name }}, namespace {{ .Release.Namespace }}.
+
+1. Доступ к API (пока без Ingress):
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dsp.fullname" . }} 8080:{{ .Values.service.port }}
+
+2. Токен первого администратора (показывается только вам, храните в надёжном месте):
+   kubectl -n {{ .Release.Namespace }} get secret {{ include "dsp.secretName" . }} -o jsonpath='{.data.ADMIN_BOOTSTRAP_TOKEN}' | base64 -d; echo
+
+3. Проверка:
+   curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/projects
+
+4. Секрет {{ include "dsp.secretName" . }} НЕ удаляется при helm uninstall (в нём ключ шифрования секретов).
+   Сохраните копию ключа SECRET_ENCRYPTION_KEY отдельно: без него зашифрованные секреты в базе не прочитать.
+
+5. Чтобы платформа могла деплоить приложения в другие namespace, добавьте их:
+   helm upgrade {{ .Release.Name }} <chart> --reuse-values --set 'rbac.deployNamespaces={apps,staging}'
+
+6. Требуется установленный kpack и ClusterBuilder (scripts/install-prereqs.sh).

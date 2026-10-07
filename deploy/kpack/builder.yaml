@@ -1,0 +1,22 @@
+apiVersion: kpack.io/v1alpha2
+kind: ClusterBuilder
+metadata:
+  name: default
+spec:
+  serviceAccountRef:
+    name: kpack-service-account
+    namespace: kpack
+  tag: registry.registry.svc.cluster.local:5000/builder
+  stack:
+    name: base
+    kind: ClusterStack
+  store:
+    name: default
+    kind: ClusterStore
+  order:
+    - group:
+        - id: paketo-buildpacks/java
+    - group:
+        - id: paketo-buildpacks/nodejs
+    - group:
+        - id: paketo-buildpacks/python
