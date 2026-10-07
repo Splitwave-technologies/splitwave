@@ -110,7 +110,7 @@ Support is through bug reports only: no live chat, phone or guaranteed response 
 
 ## Security
 
-Secrets are encrypted with a key you keep and masked in logs. In the default mode the platform can only change the image of an existing Deployment. Application namespaces are hardened, outbound requests are guarded against SSRF, and the licence signing key never lives on a web server. Read the [security model](docs/security.md) and the [security policy](SECURITY.md).
+Secrets are encrypted with a key you keep and masked in logs. In the default mode the platform can only change the image of an existing Deployment. Application namespaces are hardened, outbound requests are guarded against SSRF, and the licence signing key is held by a separate isolated component with no internet access, not by the web application. Read the [security model](docs/security.md) and the [security policy](SECURITY.md).
 
 ## Status
 
