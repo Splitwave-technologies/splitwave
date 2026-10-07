@@ -281,6 +281,7 @@ runtime_svc.pod_logs = lambda ns, dep, con, pod, tail=300, previous=False, clust
     "Started app\nERROR boom: password=hunter2222 refused\n" if previous else "current log line\n")
 _domains = {}
 provision.get_ingress_host = lambda ns, name, cluster=None: _domains.get((ns, name))
+provision.get_ingress_tls = lambda ns, name, cluster=None: (_domains.get((ns, name)), None)    # без кластера (CI) настоящий вызов падал бы: сохранение домена отвечало 502
 
 
 def _fake_set_ingress(ns, name, host, cluster=None, tls_secret=None):
