@@ -19,7 +19,32 @@ A paid plan raises the limits (projects, environments, users, clusters, servers,
 
 Everything in the free core (wizard, builds, deploy, rollback, secrets, `.env` import, approvals, 2FA, audit view, notifications, connection check) is in every plan.
 
-Limits apply to **creating** projects, environments and users. Existing ones are never deleted or locked. API tokens are not users; short-lived previews do not count as environments.
+## What is in the free core and what is paid
+
+The free core runs **one project with one environment** and **one built-in administrator account**, with every deploy feature (wizard, builds, deploy, rollback, secrets, approvals, 2FA, audit view, notifications). API tokens (for CI) have their own roles and are not user accounts.
+
+Paid modules come in the paid image and switch on with a valid key:
+
+- **Teams**: several user accounts, roles (DevOps, developer, viewer) and project members.
+- **Environments**: several environments per project and deploys by branch.
+- **Projects**: several projects on one platform.
+- **SSO, SIEM export, remote clusters, servers with an agent, PR previews, audit export** (by plan, see the table).
+
+A plan sets how many of each you may create. Limits apply to **creating**; existing data is never deleted. Short-lived previews do not count as environments.
+
+## When a licence ends
+
+Nothing is deleted, but the installation continues as Community:
+
+| | What keeps working | What stops |
+|---|---|---|
+| Accounts | Administrator accounts | Accounts with other roles and project members have no access until a key is installed again (their data stays) |
+| Projects | All projects stay visible and can be deployed from the console | New projects cannot be created; only the first project deploys automatically on a push |
+| Environments | All environments stay visible and can be deployed from the console | New environments cannot be created; only the first environment of a project deploys automatically on a push |
+| Paid modules | | SSO, SIEM, remote clusters, servers, previews and audit export switch off |
+| API tokens | Keep working with their roles | |
+
+Install a new key and everything returns without any other change.
 
 ## How a licence key works
 
@@ -27,7 +52,7 @@ Limits apply to **creating** projects, environments and users. Existing ones are
 - A key can be **bound to one installation** by its *Installation ID* (shown in the console under *License and plans*, looks like `dsp-` and 20 characters). A bound key does not work elsewhere.
 - A key is valid for the paid period plus one day. A plan is a subscription that renews automatically; each renewal sends a **new key** for the same installation by email and in your account. Install it before the old one expires.
 - Cancel any time in your account (*Manage subscription*): charging stops, the paid period stays valid.
-- When a key expires or is removed, the paid modules switch off and the installation continues as Community. No data is lost.
+- When a key expires or is removed, the paid modules switch off and the installation continues as Community (see the table above). No data is lost.
 
 ## Getting a key
 

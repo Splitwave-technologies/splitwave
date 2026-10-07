@@ -106,7 +106,7 @@ The core in this repository is source-available under the [Elastic License 2.0](
 | SSO, SIEM export, several clusters, servers with an agent | no | no | yes | yes |
 | Support | bug reports | bug reports | bug reports | bug reports |
 
-Support is through bug reports only: no live chat, phone or guaranteed response time. The software is used at your own responsibility. Yearly billing gives two months free. When a licence expires the paid modules switch off and the installation continues as Community; nothing is deleted. Existing projects, environments and accounts stay visible, but new ones cannot be added and only the first project and its first environment deploy automatically on push. Details: [plans and licences](docs/plans-licensing.md), [pricing](https://split-wave.com/pricing).
+Support is through bug reports only: no live chat, phone or guaranteed response time. The software is used at your own responsibility. Yearly billing gives two months free. When a licence expires the paid modules switch off and the installation continues as Community; nothing is deleted. Existing projects and environments stay visible and can be deployed from the console, but new ones cannot be added and only the first project and its first environment deploy automatically on push. Accounts other than administrators have no access until a key is installed again (details in [plans and licences](docs/plans-licensing.md)). Details: [plans and licences](docs/plans-licensing.md), [pricing](https://split-wave.com/pricing).
 
 ## Security
 
