@@ -23,4 +23,4 @@ def test_help_documents_https_and_offline_image_options():
 
 def test_unknown_arguments_are_rejected():
     out = subprocess.run(["bash", str(SCRIPT), "--no-such-flag"], capture_output=True, text=True)
-    assert out.returncode == 2 and "неизвестный аргумент" in out.stdout
+    assert out.returncode == 2 and "unknown argument" in out.stdout

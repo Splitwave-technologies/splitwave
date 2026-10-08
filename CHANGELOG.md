@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- The installer, the Helm notes and the prerequisites script now speak English.
+- The project page no longer shows "kubernetes 404: Not Found" under Builds on installations without kpack; builds made with kaniko are listed as before.
+
 ## 0.1.0 (first public release)
 
 First release of the free core (source-available, Elastic License 2.0).

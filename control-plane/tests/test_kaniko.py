@@ -146,6 +146,17 @@ def test_builds_list_merges_kaniko_jobs(client, admin, cluster, monkeypatch):
     assert logs.status_code == 200 and "log of kaniko" in logs.text
 
 
+def test_builds_list_without_kpack_crd_is_not_an_error(client, admin, cluster, monkeypatch):
+    from kubernetes.client.rest import ApiException
+    p, e, db = mk(client, admin)
+
+    def no_crd(*a, **k):
+        raise ApiException(status=404, reason="Not Found")
+    monkeypatch.setattr("app.services.runtime.kubeclient.custom_objects_api", lambda *a, **k: NS(list_namespaced_custom_object=no_crd))
+    r = client.get("/api/projects/shop/builds", headers=admin)
+    assert r.status_code == 200 and r.json().get("available", True) is not False and "error" not in r.json()
+
+
 def test_failed_release_reason_is_visible_only_to_those_who_can_deploy(client, admin, make_token):
     client.post("/api/projects", json={"slug": "shop", "repo_full_name": "acme/shop", "environments": [ENV]}, headers=admin)
     db = SessionLocal()

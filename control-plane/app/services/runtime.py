@@ -55,8 +55,13 @@ def list_builds(project_slug: str, namespace: str, limit: int = 15) -> list[dict
 
 def _list_kpack_builds(project_slug: str, namespace: str, limit: int = 15) -> list[dict]:
     api = kubeclient.custom_objects_api()
-    items = api.list_namespaced_custom_object(GROUP, VERSION, namespace, "builds",
-                                              label_selector=f"image.kpack.io/image={project_slug}").get("items", [])
+    try:
+        items = api.list_namespaced_custom_object(GROUP, VERSION, namespace, "builds",
+                                                  label_selector=f"image.kpack.io/image={project_slug}").get("items", [])
+    except ApiException as e:
+        if e.status == 404:      # kpack не установлен (нет CRD): сборки идут через kaniko, и список строится только из них
+            return []
+        raise
     items.sort(key=lambda b: b["metadata"].get("creationTimestamp", ""), reverse=True)
     result = []
     for b in items[:limit]:

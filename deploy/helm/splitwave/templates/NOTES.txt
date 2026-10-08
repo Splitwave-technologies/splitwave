@@ -1,18 +1,18 @@
-SplitWave установлена: релиз {{ .Release.Name }}, namespace {{ .Release.Namespace }}.
+SplitWave is installed: release {{ .Release.Name }}, namespace {{ .Release.Namespace }}.
 
-1. Доступ к API (пока без Ingress):
+1. API access (before you set up an Ingress):
    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dsp.fullname" . }} 8080:{{ .Values.service.port }}
 
-2. Токен первого администратора (показывается только вам, храните в надёжном месте):
+2. Token of the first administrator (shown only to you; keep it safe):
    kubectl -n {{ .Release.Namespace }} get secret {{ include "dsp.secretName" . }} -o jsonpath='{.data.ADMIN_BOOTSTRAP_TOKEN}' | base64 -d; echo
 
-3. Проверка:
+3. Check:
    curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/projects
 
-4. Секрет {{ include "dsp.secretName" . }} НЕ удаляется при helm uninstall (в нём ключ шифрования секретов).
-   Сохраните копию ключа SECRET_ENCRYPTION_KEY отдельно: без него зашифрованные секреты в базе не прочитать.
+4. The secret {{ include "dsp.secretName" . }} is NOT deleted by helm uninstall (it holds the key that encrypts your project secrets).
+   Keep a separate copy of the SECRET_ENCRYPTION_KEY value: without it the encrypted secrets in the database cannot be read.
 
-5. Чтобы платформа могла деплоить приложения в другие namespace, добавьте их:
+5. To let the platform deploy applications into other namespaces, add them:
    helm upgrade {{ .Release.Name }} <chart> --reuse-values --set 'rbac.deployNamespaces={apps,staging}'
 
-6. Требуется установленный kpack и ClusterBuilder (scripts/install-prereqs.sh).
+6. Optional: building with buildpacks needs kpack and a ClusterBuilder (scripts/install-prereqs.sh). Builds from a Dockerfile (kaniko) work without them.
