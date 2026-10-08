@@ -16,9 +16,9 @@ cp LICENSE LICENSE-COMMERCIAL.md README.md "$STAGE/$NAME/"
 echo "$VER" > "$STAGE/$NAME/VERSION"
 cat > "$STAGE/$NAME/install.sh" <<INSTALL
 #!/usr/bin/env bash
-# Установка SplitWave $VER на один сервер (Ubuntu 22.04/24.04 или Debian 12, root, от 4 ГБ ОЗУ).
-# Пример: sudo ./install.sh --host panel.example.com --email you@example.com
-# Остальные параметры: см. docs/install.md или ./deploy/quickstart/install-single-node.sh --help
+# Install SplitWave $VER on a single server (Ubuntu 22.04/24.04 or Debian 12, root, 4 GB RAM or more).
+# Example: sudo ./install.sh --host panel.example.com --email you@example.com
+# Other options: see docs/install.md or ./deploy/quickstart/install-single-node.sh --help
 set -euo pipefail
 cd "\$(dirname "\$0")"
 exec ./deploy/quickstart/install-single-node.sh --chart ./deploy/helm/splitwave --image "\${SPLITWAVE_IMAGE:-ghcr.io/splitwave-technologies/control-plane:$VER}" "\$@"
