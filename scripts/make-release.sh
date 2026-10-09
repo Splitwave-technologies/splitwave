@@ -14,6 +14,10 @@ mkdir -p "$STAGE/$NAME/scripts" && cp scripts/install-prereqs.sh "$STAGE/$NAME/s
 cp -r docs "$STAGE/$NAME/docs"
 cp LICENSE LICENSE-COMMERCIAL.md README.md "$STAGE/$NAME/"
 echo "$VER" > "$STAGE/$NAME/VERSION"
+# полные тексты лицензий и NOTICE всех включённых компонентов (LGPL-3.0, Apache-2.0 и др.): ставим зависимости в чистое окружение и собираем
+python3 -m venv "$STAGE/lv" && "$STAGE/lv/bin/python" -m pip install -q -r control-plane/requirements.txt
+"$STAGE/lv/bin/python" control-plane/gen_licenses.py --out "$STAGE/$NAME/licenses"
+mkdir -p "$STAGE/$NAME/licenses/texts" && cp control-plane/licenses-extra/* "$STAGE/$NAME/licenses/texts/"
 cat > "$STAGE/$NAME/install.sh" <<INSTALL
 #!/usr/bin/env bash
 # Install SplitWave $VER on a single server (Ubuntu 22.04/24.04 or Debian 12, root, 4 GB RAM or more).

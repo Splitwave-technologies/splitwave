@@ -4,6 +4,10 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+# тексты лицензий и NOTICE всех включённых компонентов: /licenses (требуют LGPL-3.0, Apache-2.0 и др.)
+COPY gen_licenses.py /tmp/gen_licenses.py
+COPY licenses-extra /licenses-extra
+RUN python /tmp/gen_licenses.py --out /licenses && mkdir -p /licenses/texts && cp /licenses-extra/* /licenses/texts/ && rm -rf /tmp/gen_licenses.py /licenses-extra
 COPY alembic.ini .
 COPY alembic alembic
 COPY app app

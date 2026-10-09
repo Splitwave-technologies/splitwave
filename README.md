@@ -34,7 +34,7 @@
 
 ## Why SplitWave
 
-You connect a Git repository, and every push is built, rolled out, audited and reversible. It runs on your own infrastructure, keeps your secrets encrypted, and sends nothing about you out: no telemetry, no licence server. The only outgoing request is an optional once-a-day read of a public file with the latest version number (nothing is sent; switch it off with `UPDATE_CHECK=false`).
+You connect a Git repository, and every push is built, rolled out, audited and reversible. It runs on your own infrastructure, keeps your secrets encrypted, and has no telemetry and no licence server. The only outgoing request is an optional once-a-day read of a public file with the latest version number (nothing is sent; switch it off with `UPDATE_CHECK=false`).
 
 - **Three clicks to a first deploy.** Paste a repository link. The platform detects the language, the Dockerfile and the port, and prepares the application.
 - **A failed rollout does no harm.** A release counts as deployed only when the application really started. On a crash the previous version stays in place and you see why.
@@ -128,7 +128,7 @@ Start with the [documentation index](docs/README.md): [quick start](docs/quickst
 
 ## Support the project
 
-The free core is built and maintained by one person. If it saves you time, you can support its development:
+The free core is free. SplitWave is developed and maintained by Abzal Gabdullin, with testing and reviews by the Koratech team. Donations are received by ИП «KORATECH» and are voluntary; they do not unlock paid features. If it saves you time, you can support its development:
 
 | Network | Address |
 |---|---|
@@ -147,4 +147,4 @@ The core is released under the [Elastic License 2.0](LICENSE) (source-available,
 
 ---
 
-<p align="center"><sub>© 2026 Koratech · <a href="https://split-wave.com">split-wave.com</a></sub></p>
+<p align="center"><sub>© 2026 ИП «KORATECH» (sole proprietor Abzal Gabdullin), trading as SplitWave · <a href="https://split-wave.com">split-wave.com</a></sub></p>

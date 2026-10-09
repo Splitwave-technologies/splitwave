@@ -14,4 +14,4 @@ The paid modules of SplitWave (the Lite, Pro and Max features) are proprietary s
 
 Questions about licensing: support@split-wave.com
 
-Koratech (sole proprietor), Republic of Kazakhstan.
+ИП «KORATECH» (sole proprietor Abzal Gabdullin), trading as SplitWave, Republic of Kazakhstan.
