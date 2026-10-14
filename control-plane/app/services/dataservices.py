@@ -213,6 +213,8 @@ def credentials_env(engine: str, c: client.V1Container, prefix: str = "") -> lis
     spec = ENGINES[engine]
     user = _find_env(c, spec["env_user"])
     pwd = _find_env(c, spec["env_password"])
+    if pwd is None and c.env_from:
+        return []                      # учётные данные приходят целиком из Secret/ConfigMap (envFrom): Job получит те же envFrom, а имена переназначит env_prelude
     if pwd is None and engine not in ("redis",):
         raise DataServiceError("password variable of the container not found (expected one of: " + ", ".join(spec["env_password"]) + ")")
     if engine == "postgres":
@@ -223,6 +225,19 @@ def credentials_env(engine: str, c: client.V1Container, prefix: str = "") -> lis
     else:
         out = [_env_as(user, prefix + "ACCESS"), _env_as(pwd, prefix + "SECRET")]
     return [e for e in out if e is not None]
+
+
+def env_prelude(engine: str) -> str:
+    """Если пароль пришёл через envFrom (POSTGRES_PASSWORD и т.п.), переназначаем в переменные клиента; уже заданные не трогаем."""
+    if engine == "postgres":
+        return ('export PGUSER="${PGUSER:-${POSTGRES_USER:-${POSTGRESQL_USERNAME:-postgres}}}"; '
+                'export PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-${POSTGRESQL_PASSWORD:-}}}"; ')
+    if engine in ("mysql", "mariadb"):
+        return 'export MYSQL_PWD="${MYSQL_PWD:-${MYSQL_ROOT_PASSWORD:-${MARIADB_ROOT_PASSWORD:-}}}"; '
+    if ENGINES.get(engine, {}).get("category") == "s3":
+        return ('export RCLONE_CONFIG_SRC_ACCESS_KEY_ID="${RCLONE_CONFIG_SRC_ACCESS_KEY_ID:-${MINIO_ROOT_USER:-${MINIO_ACCESS_KEY:-${AWS_ACCESS_KEY_ID:-}}}}"; '
+                'export RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY="${RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY:-${MINIO_ROOT_PASSWORD:-${MINIO_SECRET_KEY:-${AWS_SECRET_ACCESS_KEY:-}}}}"; ')
+    return ""
 
 
 # ---------- смена версии без смены формата данных ----------
@@ -293,8 +308,8 @@ def start_backup(namespace: str, w, c: client.V1Container, engine: str, cluster:
         metadata=client.V1ObjectMeta(name=pvc_name, labels={LABEL_JOB: "backup", LABEL_INSTANCE: w.metadata.name}),
         spec=client.V1PersistentVolumeClaimSpec(access_modes=["ReadWriteOnce"], resources=client.V1VolumeResourceRequirements(requests={"storage": size}))))
     cmd = dump_command(engine, svc.metadata.name, ENGINES[engine]["port"]) + " > /dump/dump.sql"
-    job = _job(job_name, namespace, client_image(engine, c), ["sh", "-c", "set -e; " + cmd], credentials_env(engine, c),
-               {LABEL_JOB: "backup", LABEL_INSTANCE: w.metadata.name}, volumes=[("dump", pvc_name, "/dump")])
+    job = _job(job_name, namespace, client_image(engine, c), ["sh", "-c", "set -e; " + env_prelude(engine) + cmd], credentials_env(engine, c),
+               {LABEL_JOB: "backup", LABEL_INSTANCE: w.metadata.name}, volumes=[("dump", pvc_name, "/dump")], env_from=c.env_from)
     kubeclient.batch_v1_api(cluster).create_namespaced_job(namespace, job)
     return {"job": job_name, "volume": pvc_name}
 
@@ -360,13 +375,13 @@ def restore_command(engine: str, host: str, port: int) -> str:
     return f"mysql -h {host} -P {port}"
 
 
-def _job(name: str, namespace: str, image: str, command: list[str], env: list, labels: dict, volumes=None) -> client.V1Job:
+def _job(name: str, namespace: str, image: str, command: list[str], env: list, labels: dict, volumes=None, env_from=None) -> client.V1Job:
     vols, mounts = [], []
     for vname, pvc, path in volumes or []:
         vols.append(client.V1Volume(name=vname, persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(claim_name=pvc)))
         mounts.append(client.V1VolumeMount(name=vname, mount_path=path))
     container = client.V1Container(
-        name="work", image=image, command=command, env=env, volume_mounts=mounts or None,
+        name="work", image=image, command=command, env=env, env_from=deepcopy(env_from) if env_from else None, volume_mounts=mounts or None,
         security_context=client.V1SecurityContext(allow_privilege_escalation=False, capabilities=client.V1Capabilities(drop=["ALL"])),
         resources=client.V1ResourceRequirements(requests={"cpu": "50m", "memory": "64Mi"}, limits={"memory": "1Gi"}))
     return client.V1Job(
@@ -506,8 +521,8 @@ def advance(namespace: str, name: str, cluster: Optional[str] = None) -> Optiona
             engine = st["engine"]
             cmd = copy_script(engine, st["service"], st["new_svc"])
             env = credentials_env(engine, c)
-            job = _job(st["job"], namespace, client_image(engine, c, st["to_tag"]), ["sh", "-c", cmd], env,
-                       {LABEL_JOB: "copy", LABEL_INSTANCE: name})
+            job = _job(st["job"], namespace, client_image(engine, c, st["to_tag"]), ["sh", "-c", env_prelude(engine) + cmd], env,
+                       {LABEL_JOB: "copy", LABEL_INSTANCE: name}, env_from=c.env_from)
             batch.create_namespaced_job(namespace, job)
             st.update(phase="copying", message="copying data to the new instance")
     elif phase == "copying":
@@ -623,14 +638,16 @@ def start_s3_copy(namespace: str, name: str, dest: dict, cluster: Optional[str] 
     if not svc:
         raise DataServiceError("no Service found for this storage", 409)
     src = credentials_env(engine, c)
-    if len(src) < 2:
+    if not src and c.env_from:
+        src = [None, None]                       # ключи источника придут через envFrom, переназначит env_prelude
+    elif len(src) < 2:
         raise DataServiceError("access keys of the source are not set as container variables", 409)
     secret_name = f"{name}-s3copy-{uuid.uuid4().hex[:6]}"
     core.create_namespaced_secret(namespace, client.V1Secret(
         metadata=client.V1ObjectMeta(name=secret_name, labels={LABEL_JOB: "s3copy"}),
         string_data={"access": dest["access_key"], "secret": dest["secret_key"]}))
     provider = dest.get("provider") or "Other"
-    env = [_env_as(src[0], "RCLONE_CONFIG_SRC_ACCESS_KEY_ID"), _env_as(src[1], "RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY"),
+    env = [e for e in (_env_as(src[0], "RCLONE_CONFIG_SRC_ACCESS_KEY_ID"), _env_as(src[1], "RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY")) if e] + [
            client.V1EnvVar(name="RCLONE_CONFIG_SRC_TYPE", value="s3"),
            client.V1EnvVar(name="RCLONE_CONFIG_SRC_PROVIDER", value=ENGINES[engine]["rclone_provider"]),
            client.V1EnvVar(name="RCLONE_CONFIG_SRC_ENDPOINT", value=f"http://{svc.metadata.name}:{ENGINES[engine]['port']}"),
@@ -644,8 +661,8 @@ def start_s3_copy(namespace: str, name: str, dest: dict, cluster: Optional[str] 
     job_name = f"{name}-s3copy-{uuid.uuid4().hex[:6]}"
     batch.create_namespaced_job(namespace, _job(
         job_name, namespace, RCLONE_IMAGE,
-        ["sh", "-c", _RCLONE_SCRIPT],
-        env, {LABEL_JOB: "s3copy", LABEL_INSTANCE: name}))
+        ["sh", "-c", env_prelude(engine) + _RCLONE_SCRIPT],
+        env, {LABEL_JOB: "s3copy", LABEL_INSTANCE: name}, env_from=c.env_from))
     state = {"id": uuid.uuid4().hex[:8], "kind": "s3", "engine": engine, "phase": "copying", "job": job_name, "secret": secret_name,
              "dest_endpoint": endpoint, "started": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              "message": "copying buckets (rclone copy, then rclone check)"}

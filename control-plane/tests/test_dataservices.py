@@ -327,3 +327,28 @@ def test_api_explains_missing_cluster_rights(client, admin, project, monkeypatch
     monkeypatch.setattr(ds, "discover", lambda ns, cluster=None: (_ for _ in ()).throw(ApiException(status=500, reason="Boom")))
     r = client.get("/api/projects/demo/environments/prod/data-services", headers=admin)
     assert r.status_code == 502 and "500" in r.json()["detail"]
+
+
+def test_password_from_envfrom_secret_reaches_the_jobs(cluster):
+    """Пароль может приходить через envFrom (Secret подключён целиком): Job получает те же envFrom и переназначает имена."""
+    sts = make_sts()
+    sts.spec.template.spec.containers[0].env = [_env("PGDATA", "/var/lib/postgresql/data/pgdata")]
+    sts.spec.template.spec.containers[0].env_from = [k8s.V1EnvFromSource(secret_ref=k8s.V1SecretEnvSource(name="sarkyt-db"))]
+    cluster.sts["db"] = sts
+    cluster.svc["db"] = make_svc()
+    st = ds.start_migration(NS, "db", "17-3.5")
+    cluster.sts[st["new_sts"]].status.ready_replicas = 1
+    st = ds.advance(NS, "db")
+    c = cluster.jobs[st["job"]].spec.template.spec.containers[0]
+    assert c.env_from[0].secret_ref.name == "sarkyt-db"
+    assert "PGPASSWORD=" in c.command[2] and "POSTGRES_PASSWORD" in c.command[2]
+    assert "export PGPASSWORD" in c.command[2].split("pg_dumpall")[0]
+
+
+def test_missing_password_is_still_refused_without_envfrom(cluster):
+    sts = make_sts()
+    sts.spec.template.spec.containers[0].env = []
+    cluster.sts["db"] = sts
+    cluster.svc["db"] = make_svc()
+    with pytest.raises(ds.DataServiceError, match="password variable"):
+        ds.start_migration(NS, "db", "17")
