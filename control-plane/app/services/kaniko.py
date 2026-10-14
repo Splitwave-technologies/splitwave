@@ -48,6 +48,10 @@ def job_body(project, image_name: str, namespace: str, git_url: str, revision: s
         args.append(f"--context-sub-path={project.sub_path}")
     for reg in [r.strip() for r in settings.kaniko_insecure_registries.split(",") if r.strip()]:
         args += [f"--insecure-registry={reg}", f"--skip-tls-verify-registry={reg}"]
+    for mirror in [m.strip() for m in settings.kaniko_registry_mirrors.split(",") if m.strip()]:
+        args.append(f"--registry-mirror={mirror}")
+    if settings.kaniko_retries > 0:
+        args += [f"--image-download-retry={settings.kaniko_retries}", f"--push-retry={settings.kaniko_retries}"]
     secret = f"git-{project.slug}"[:63]
     script = ('set -eu\n'
               'git init -q /workspace && cd /workspace\n'

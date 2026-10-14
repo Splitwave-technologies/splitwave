@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     kaniko_git_image: str = "alpine/git:2.45.2"
     kaniko_registry_secret: str = "ghcr-creds"       # Secret dockerconfigjson с доступом на запись в реестр образов
     kaniko_insecure_registries: str = ""              # реестры без TLS (через запятую), например registry.registry.svc:5000
+    kaniko_registry_mirrors: str = "mirror.gcr.io"   # зеркала для базовых образов (через запятую): index.docker.io иногда даёт TLS timeout
+    kaniko_retries: int = 3                           # повторы скачивания базовых образов и публикации
     kaniko_cpu: str = "1"
     kaniko_memory: str = "2Gi"
     kaniko_memory_limit: str = "4Gi"
