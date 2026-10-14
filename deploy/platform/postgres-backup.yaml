@@ -32,10 +32,15 @@ spec:
                 - sh
                 - -c
                 - |
-                  set -e
+                  set -eu
                   FILE=/backups/platform-$(date +%Y%m%d-%H%M%S).sql.gz
-                  pg_dump -h postgres -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$FILE"
-                  echo "Backup written: $FILE"
+                  # сеть пода (NetworkPolicy) применяется не мгновенно: ждём БД, а не падаем с «Connection refused»
+                  n=0; until pg_isready -q -h postgres; do n=$((n+1)); [ "$n" -gt 60 ] && echo "database is not reachable" && exit 1; sleep 2; done
+                  # дамп во временный файл, чтобы ошибка pg_dump не терялась в конвейере и не оставляла пустой «бэкап»
+                  pg_dump -h postgres -U "$POSTGRES_USER" "$POSTGRES_DB" > "$FILE.tmp"
+                  gzip -c "$FILE.tmp" > "$FILE" && rm -f "$FILE.tmp"
+                  [ -s "$FILE" ] || { echo "empty backup"; exit 1; }
+                  echo "Backup written: $FILE ($(wc -c < "$FILE") bytes)"
                   find /backups -name '*.sql.gz' -mtime +14 -delete
               volumeMounts:
                 - name: backups
