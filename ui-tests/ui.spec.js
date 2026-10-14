@@ -1221,5 +1221,15 @@ test("data services: version, migration steps and S3 copy dialog", async ({ page
   await page.getByTestId("ds-migration-db").getByRole("button", { name: /switch over|Переключить/i }).click();
   await page.getByRole("button", { name: /switch over|Переключить/i }).last().click();
   await expect(page.getByTestId("ds-migration-db")).toContainText("switched");
+  // после переключения доступны откат и удаление старого экземпляра (с вводом имени)
+  await expect(page.getByTestId("ds-migration-db").getByRole("button", { name: /roll back|Откатить/i })).toBeVisible();
+  await page.getByTestId("ds-migration-db").getByRole("button", { name: /delete old|Удалить старую/i }).click();
+  await page.getByRole("dialog").getByRole("textbox").fill("db");
+  await page.getByRole("dialog").getByRole("button", { name: /^(delete|Удалить)$/i }).click();
+  await expect(page.getByTestId("ds-migration-db")).toHaveCount(0);
+  // копирование S3: форма с endpoint и ключами
+  await page.getByTestId("ds-s3-minio").click();
+  await expect(page.getByTestId("ds-ep")).toBeVisible();
+  await expect(page.getByTestId("ds-sk")).toHaveAttribute("type", "password");
   expect(errors).toEqual([]);
 });

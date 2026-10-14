@@ -316,3 +316,14 @@ def test_api_migration_flow_and_finalize_needs_the_name(client, admin, project, 
     assert client.post(f"{base}/migration/rollback", headers=admin).json()["phase"] == "rolled_back"
     events = {e["action"] for e in client.get("/api/audit", headers=admin).json()} if client.get("/api/audit", headers=admin).status_code == 200 else set()
     assert not events or "data_migration_start" in events
+
+
+def test_api_explains_missing_cluster_rights(client, admin, project, monkeypatch):
+    def deny(ns, cluster=None):
+        raise ApiException(status=403, reason="Forbidden")
+    monkeypatch.setattr(ds, "discover", deny)
+    r = client.get("/api/projects/demo/environments/prod/data-services", headers=admin)
+    assert r.status_code == 403 and "rbac.dataServices" in r.json()["detail"]
+    monkeypatch.setattr(ds, "discover", lambda ns, cluster=None: (_ for _ in ()).throw(ApiException(status=500, reason="Boom")))
+    r = client.get("/api/projects/demo/environments/prod/data-services", headers=admin)
+    assert r.status_code == 502 and "500" in r.json()["detail"]

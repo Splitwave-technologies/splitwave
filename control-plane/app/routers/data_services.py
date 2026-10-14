@@ -2,6 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -51,6 +52,13 @@ async def _run(fn, *args, **kw):
         return await run_in_threadpool(fn, *args, **kw)
     except ds.DataServiceError as e:
         raise HTTPException(status_code=e.status, detail=str(e))
+    except ApiException as e:
+        if e.status == 403:
+            raise HTTPException(status_code=403, detail="the platform has no rights for data services in this namespace: "
+                                "install with rbac.dataServices=true or apply deploy/platform/namespace-access-dataservices.yaml (see docs/data-services.md)")
+        raise HTTPException(status_code=502, detail=f"kubernetes {e.status}: {e.reason or 'error'}")
+    except Exception as e:      # кластер недоступен и т.п.: пустого «Error:» в интерфейсе быть не должно
+        raise HTTPException(status_code=502, detail=f"cluster error: {str(e)[:200] or type(e).__name__}")
 
 
 def _audit(db, principal, project, env, action: str, name: str, detail: dict):

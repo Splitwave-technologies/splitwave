@@ -82,7 +82,7 @@ export function dataServicesCard(slug, envName, ctx) {
     clearTimeout(timer);
     let data;
     try { data = await api(base); } catch (e) {
-      body.replaceChildren(h("div", { class: "empty" }, /Kubernetes/.test(e.message || "") ? t("dsK8sOnly") : `${t("error")}: ${e.message}`));
+      body.replaceChildren(h("div", { class: "empty" }, /Kubernetes/.test(e.message || "") ? t("dsK8sOnly") : e.status === 403 ? t("dsNoRights") : `${t("error")}: ${e.message || e.status || "?"}`));
       return;
     }
     // каждую активную миграцию продвигаем (автомат шагает по запросу состояния)
