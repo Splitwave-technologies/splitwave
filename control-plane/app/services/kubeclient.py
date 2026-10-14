@@ -45,8 +45,10 @@ def serialize(obj) -> dict:
     return client.ApiClient().sanitize_for_serialization(obj)
 
 
-def batch_v1_api() -> client.BatchV1Api:
-    """Задания сборки по Dockerfile (kaniko) всегда в домашнем кластере."""
+def batch_v1_api(cluster=None) -> client.BatchV1Api:
+    """Задания сборки по Dockerfile (kaniko) идут в домашнем кластере; задания сервисов данных — в кластере среды."""
+    if cluster:
+        return client.BatchV1Api(_remote(cluster))
     _ensure_loaded()
     return client.BatchV1Api()
 

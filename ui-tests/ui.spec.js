@@ -1198,3 +1198,28 @@ test("update banner: the administrator sees a new version with a safe link; noth
   await expect(page.getByTestId("update-banner")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+
+test("data services: version, migration steps and S3 copy dialog", async ({ page, request }) => {
+  const errors = watch(page);
+  const slug = uniq("ds");
+  await mkProject(request, slug);
+  await login(page);
+  await page.goto(`/ui/#/project/${slug}/prod`);
+  await expect(page.getByTestId("ds-db")).toContainText("PostgreSQL");
+  await expect(page.getByTestId("ds-minio")).toContainText("MinIO");
+  await expect(page.getByTestId("ds-migrate-minio")).toHaveCount(0);        // S3 не мигрируется как БД
+  await expect(page.getByTestId("ds-s3-minio")).toBeVisible();
+  await page.getByTestId("ds-version-db").click();
+  await expect(page.getByTestId("ds-backup")).toBeChecked();
+  await page.keyboard.press("Escape");
+  await page.getByTestId("ds-migrate-db").click();
+  await page.getByTestId("ds-target").fill("17");
+  await page.getByTestId("ds-migrate-go").click();
+  await expect(page.getByTestId("ds-migration-db")).toContainText("copied");
+  await page.screenshot({ path: `${SHOTS}/data-services.png`, fullPage: true });
+  await page.getByTestId("ds-migration-db").getByRole("button", { name: /switch over|Переключить/i }).click();
+  await page.getByRole("button", { name: /switch over|Переключить/i }).last().click();
+  await expect(page.getByTestId("ds-migration-db")).toContainText("switched");
+  expect(errors).toEqual([]);
+});

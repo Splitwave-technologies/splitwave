@@ -11,6 +11,7 @@
 - [Domains and certificates](domains-tls.md)
 - [Secrets](secrets.md)
 - [External services](external-services.md)
+- [Data services: versions and migrations of databases and S3](data-services.md)
 - [Team and security](team-security.md)
 - [Notifications and SIEM](notifications-siem.md)
 

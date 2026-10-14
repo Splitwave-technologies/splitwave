@@ -46,6 +46,8 @@ app.include_router(audit_router.router)
 app.include_router(license_router.router)
 from app.routers import updates as updates_router  # noqa: E402
 app.include_router(updates_router.router)
+from app.routers import data_services as data_services_router  # noqa: E402
+app.include_router(data_services_router.router)
 app.state.ee_loaded = load_enterprise(app)
 
 UI_DIR = Path(__file__).parent / "ui"

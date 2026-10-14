@@ -93,6 +93,7 @@ rbac:
   create: true
   deployNamespaces: []      # namespace, где платформа может деплоить приложения и создавать Secret
   previews: false           # true: права создавать/удалять Deployment и Service (нужно платной функции «временные среды под PR»)
+  dataServices: false       # true: права на StatefulSet, Service, PVC и scale в deployNamespaces (раздел «Сервисы данных»: смена версии и миграция БД и S3)
 
 # ── Мастер подключения проекта (Проекты → Подключить репозиторий) ──
 onboarding:

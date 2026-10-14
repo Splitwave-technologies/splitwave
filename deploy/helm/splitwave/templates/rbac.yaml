@@ -41,6 +41,20 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "create", "delete"]
+{{- if $root.Values.rbac.dataServices }}
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/scale", "deployments/scale"]
+    verbs: ["get", "list", "create", "patch", "delete"]       # «Сервисы данных»: смена версии и миграция БД/S3
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]                                          # временный Secret с ключами приёмника при копировании S3
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]                                            # поиск приложений платформы, которые нужно остановить на время копирования данных
+{{- end }}
   - apiGroups: ["batch"]
     resources: ["jobs/status"]
     verbs: ["get"]                       # платформа читает ход сборки kaniko через подресурс status
@@ -100,6 +114,20 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "create", "delete"]
+{{- if .Values.rbac.dataServices }}
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/scale", "deployments/scale"]
+    verbs: ["get", "list", "create", "patch", "delete"]       # «Сервисы данных»: смена версии и миграция БД/S3
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]                                          # временный Secret с ключами приёмника при копировании S3
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]                                            # поиск приложений платформы, которые нужно остановить на время копирования данных
+{{- end }}
   - apiGroups: ["batch"]
     resources: ["jobs/status"]
     verbs: ["get"]                       # платформа читает ход сборки kaniko через подресурс status
@@ -115,6 +143,9 @@ rules:
   - apiGroups: [""]
     resources: ["namespaces", "services"]
     verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["delete"]   # «Удалить проект вместе с ресурсами в кластере»; удаляются только namespace'ы с меткой managed-by
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["create"]

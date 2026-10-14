@@ -1,0 +1,36 @@
+# Дополнительные права платформы для раздела «Сервисы данных» (смена версии и миграция БД и S3 в namespace приложения).
+# Нужны ТОЛЬКО если вы пользуетесь этим разделом. Применение рядом с namespace-access.yaml:
+#   sed 's/NAMESPACE/my-app/g' namespace-access-dataservices.yaml | kubectl apply -f -
+# Платформа удаляет и создаёт StatefulSet, Service и PVC только по явной команде пользователя с правом projects:manage;
+# все такие действия пишутся в журнал аудита.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-plane-dataservices
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/scale", "deployments/scale"]
+    verbs: ["get", "list", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane-dataservices
+  namespace: NAMESPACE
+subjects:
+  - kind: ServiceAccount
+    name: control-plane-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: control-plane-dataservices
+  apiGroup: rbac.authorization.k8s.io

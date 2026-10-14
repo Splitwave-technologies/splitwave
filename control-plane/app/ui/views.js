@@ -5,6 +5,7 @@ import { membersCard } from "./account.js";
 import { envImportCard } from "./envimport.js";
 import { connectionsDialog } from "./connections.js";
 import { certSection } from "./domaincert.js";
+import { dataServicesCard } from "./dataservices.js";
 import { pendingCard } from "./approvals.js";
 import { columnChart, hbars } from "./charts.js";
 
@@ -406,6 +407,7 @@ export async function projectView(root, ctx, slug, envName) {
   }
   root.append(card(t("environments"), envBody, (canManage && ctx.me && ctx.me.environments) ? h("button", { class: "btn small primary", type: "button", "data-testid": "env-add", onclick: () => envDialog(null) }, t("addEnvironment")) : null));
   loadEnvs();
+  if (!(ctx.me && ctx.me.server_only)) root.append(dataServicesCard(slug, envName, ctx));   // БД и S3 среды: версия, миграция
 
   /* источник кода и вебхук */
   {
@@ -568,10 +570,17 @@ export async function projectView(root, ctx, slug, envName) {
 
   /* опасная зона */
   if (ctx.can("projects:manage")) {
+    const cleanup = h("input", { type: "checkbox", "data-testid": "delete-project-cluster" });
     root.append(card(t("dangerZone"), h("div", { class: "card-body row" }, h("p", { class: "muted small" }, t("deleteProjectHint")), h("span", { class: "spacer" }),
+      h("label", { class: "small" }, cleanup, " ", t("deleteProjectCluster")), " ",
       h("button", { class: "btn danger", type: "button", "data-testid": "delete-project", onclick: async () => {
-        if (!(await confirmDialog({ title: t("deleteProject"), message: t("deleteProjectHint"), danger: true, confirmLabel: t("delete"), expect: slug }))) return;
-        try { await api(base, { method: "DELETE" }); toast(t("projectDeleted"), "ok"); location.hash = "#/projects"; } catch (e) { toast(e.message, "bad"); }
+        const withCluster = cleanup.checked;
+        if (!(await confirmDialog({ title: t("deleteProject"), message: withCluster ? t("deleteProjectClusterHint") : t("deleteProjectHint"), danger: true, confirmLabel: t("delete"), expect: slug }))) return;
+        try {
+          const r = await api(`${base}${withCluster ? "?cleanup_cluster=true" : ""}`, { method: "DELETE" });
+          const failed = r && r.cluster && r.cluster.failed && r.cluster.failed.length;
+          toast(failed ? t("projectDeletedClusterFailed") : t("projectDeleted"), failed ? "bad" : "ok"); location.hash = "#/projects";
+        } catch (e) { toast(e.message, "bad"); }
       } }, t("deleteProject")))));
   }
 }

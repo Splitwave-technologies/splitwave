@@ -180,15 +180,51 @@ async def create_project(body: ProjectIn, principal: Principal = Depends(require
         db.close()
 
 
+def _delete_namespaces(pairs) -> dict:
+    """Удаляет namespace'ы, помеченные как созданные платформой. Чужие, системные и без метки не трогает.
+    Ошибка по одному namespace не мешает остальным: итог — списки deleted / skipped / failed."""
+    from kubernetes.client.rest import ApiException
+    from app.services import kubeclient, manifests
+    from app.services.secrets import is_managed
+    result = {"deleted": [], "skipped": [], "failed": []}
+    for cluster, ns in pairs:
+        if ns in ("default", "kube-system", "kube-public", "kube-node-lease", manifests.platform_namespace()):
+            result["skipped"].append(ns)
+            continue
+        try:
+            core = kubeclient.core_v1_api(cluster)
+            if not is_managed(core.read_namespace(ns).metadata.labels):
+                result["skipped"].append(ns)
+                continue
+            core.delete_namespace(ns)
+            result["deleted"].append(ns)
+        except ApiException as e:
+            if e.status == 404:
+                result["skipped"].append(ns)
+            else:
+                result["failed"].append({"namespace": ns, "error": f"{e.status} {e.reason}"})
+        except Exception as e:  # кластер недоступен и т.п.
+            result["failed"].append({"namespace": ns, "error": str(e)[:200]})
+    return result
+
+
 @router.delete("/{slug}")
-async def delete_project(slug: str, principal: Principal = Depends(require("projects:manage"))):
-    """Удаляет проект из платформы (вместе с секретами и релизами в БД). Ресурсы в кластере не трогает."""
+async def delete_project(slug: str, cleanup_cluster: bool = Query(default=False),
+                         principal: Principal = Depends(require("projects:manage"))):
+    """Удаляет проект из платформы (вместе с секретами и релизами в БД). Ресурсы в кластере по умолчанию не трогает;
+    с cleanup_cluster=true удаляет и namespace'ы сред, созданные самой платформой (по метке managed-by)."""
     db = SessionLocal()
     try:
         project = project_repo.get_project_by_slug(db, slug)
         if not project:
             raise HTTPException(status_code=404, detail=f"unknown project {slug}")
         pid = project.id
+        cluster_result = None
+        if cleanup_cluster:
+            targets_ns = {(e.cluster, e.namespace) for e in project.environments if not e.server}
+            others = {(e.cluster, e.namespace) for p in project_repo.list_projects(db) if p.id != pid
+                      for e in p.environments if not e.server}
+            cluster_result = await run_in_threadpool(_delete_namespaces, sorted(targets_ns - others, key=str))
         # Аудит не удаляем: события отвязываем от проекта (внешний ключ), запоминая slug в деталях.
         env_ids = [e.id for e in project.environments]
         events = db.query(AuditEvent).filter(AuditEvent.project_id == pid)
@@ -208,8 +244,9 @@ async def delete_project(slug: str, principal: Principal = Depends(require("proj
         db.flush()
         db.delete(project)
         db.commit()
-        audit.log_event(db, principal.name, "project_delete", None, detail={"slug": slug, "project_id": str(pid)})
-        return {"deleted": slug}
+        audit.log_event(db, principal.name, "project_delete", None,
+                        detail={"slug": slug, "project_id": str(pid), **({"cluster": cluster_result} if cluster_result is not None else {})})
+        return {"deleted": slug, **({"cluster": cluster_result} if cluster_result is not None else {})}
     finally:
         db.close()
 

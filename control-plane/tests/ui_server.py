@@ -296,5 +296,49 @@ def _fake_set_ingress(ns, name, host, cluster=None, tls_secret=None):
 provision.set_ingress = _fake_set_ingress
 
 
+# сервисы данных: БД и S3 в памяти (миграция сразу «скопирована»: интерфейсу важны кнопки и переходы состояний)
+from app.services import dataservices as ds_svc
+
+_ds = {"db": {"name": "db", "workload": "StatefulSet", "engine": "postgres", "label": "PostgreSQL", "category": "database",
+              "image": "postgis/postgis:16-3.5", "repo": "postgis/postgis", "tag": "16-3.5", "major": "16", "replicas": 1, "ready": 1,
+              "service": "db", "port": 5432, "volumes": [{"name": "data", "size": "5Gi"}], "migration": None},
+       "minio": {"name": "minio", "workload": "StatefulSet", "engine": "minio", "label": "MinIO", "category": "s3",
+                 "image": "bitnamilegacy/minio:2025.7.23-debian-12-r3", "repo": "bitnamilegacy/minio", "tag": "2025.7.23-debian-12-r3",
+                 "major": None, "replicas": 1, "ready": 1, "service": "minio", "port": 9000, "volumes": [], "migration": None}}
+
+
+def _ds_state(name):
+    m = _ds[name]["migration"]
+    if not m:
+        raise ds_svc.DataServiceError("nothing to do", 409)
+    return m
+
+
+def _ds_start(ns, name, tag, cluster=None, stop_app=False):
+    _ds[name]["migration"] = {"kind": "db", "engine": "postgres", "phase": "copied", "from_tag": _ds[name]["tag"], "to_tag": tag,
+                              "stop_app": stop_app, "message": "data copied; ready to switch over", "job": "j"}
+    return _ds[name]["migration"]
+
+
+def _ds_phase(phase, message):
+    def step(ns, name, cluster=None):
+        m = _ds_state(name)
+        m.update(phase=phase, message=message)
+        if phase in ("rolled_back", "finalized"):
+            _ds[name]["migration"] = None if phase == "finalized" else m
+        return m
+    return step
+
+
+ds_svc.discover = lambda ns, cluster=None: [dict(v) for v in _ds.values()]
+ds_svc.start_migration = _ds_start
+ds_svc.advance = lambda ns, name, cluster=None: _ds[name]["migration"]
+ds_svc.job_log = lambda ns, job, cluster=None, tail=80: "pg_dumpall ok"
+ds_svc.cutover = _ds_phase("switched", "switched to the new instance")
+ds_svc.rollback = _ds_phase("rolled_back", "rolled back")
+ds_svc.finalize = _ds_phase("finalized", "removed")
+ds_svc.change_version = lambda ns, name, tag, cluster=None, backup=True: {"name": name, "engine": _ds[name]["engine"], "from": _ds[name]["image"], "to": tag, "backup_job": None}
+
+
 if __name__ == "__main__":
     uvicorn.run(main.app, host="127.0.0.1", port=int(os.environ.get("PORT", "18099")), log_level="warning")

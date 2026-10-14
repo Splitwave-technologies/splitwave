@@ -1,3 +1,8 @@
+## 0.1.4 (in progress)
+
+- **Data services.** A new card on the project page finds the databases and S3 storages in the environment namespace (PostgreSQL, MySQL, MariaDB, Redis, MinIO, SeaweedFS) and manages them: change the image version within the same major version (with an optional dump first), migrate a database to a newer major version side by side (new instance, dump copy, one-click switch-over, rollback at any moment, delete the old instance when sure), and copy an S3 storage into another one with verification. Needs `rbac.dataServices=true`. See `docs/data-services.md`.
+- **Delete a project together with its cluster resources.** The project deletion has a new checkbox; only namespaces created by SplitWave are removed. Adds the `delete` right on namespaces to the provisioner role.
+
 # Changelog
 
 ## 0.1.3
