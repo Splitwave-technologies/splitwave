@@ -771,11 +771,11 @@ export async function overviewView(root, ctx) {
         card(t("deploysPerDay"), h("div", { class: "card-body", "data-testid": "chart-deploys" }, columnChart({
           ariaLabel: t("deploysPerDay"),
           data: o.deploys_by_day.map((d) => ({ label: dayLabel(d.date), short: String(Number(d.date.slice(8))), values: [d.deployed, d.failed, d.other] })),
-          series: [{ name: t("deployedLbl"), color: "var(--s1)" }, { name: t("failedLbl"), color: "var(--bar-bad)" }, { name: t("otherLbl"), color: "var(--axis)" }] }))),
+          series: [{ name: t("deployedLbl"), color: "var(--good)" }, { name: t("failedLbl"), color: "var(--bar-bad)" }, { name: t("otherLbl"), color: "var(--axis)" }] }))),
         h("div", { class: "grid-2c" },
           card(t("byProject"), h("div", { class: "card-body" }, o.by_project.length
             ? hbars({ rows: o.by_project.map((p) => ({ label: p.slug, href: `#/project/${enc(p.slug)}/prod`,
-              segments: [{ name: t("deployedLbl"), value: p.deployed, color: "var(--s1)" }, { name: t("failedLbl"), value: p.failed, color: "var(--bar-bad)" }, { name: t("otherLbl"), value: p.other, color: "var(--axis)" }],
+              segments: [{ name: t("deployedLbl"), value: p.deployed, color: "var(--good)" }, { name: t("failedLbl"), value: p.failed, color: "var(--bar-bad)" }, { name: t("otherLbl"), value: p.other, color: "var(--axis)" }],
               suffix: `${p.deployed + p.failed + p.other}` })) })
             : h("div", { class: "muted" }, t("noData")))),
           card(t("failureReasons"), h("div", { class: "card-body" }, o.failures.length
