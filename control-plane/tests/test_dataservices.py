@@ -352,3 +352,21 @@ def test_missing_password_is_still_refused_without_envfrom(cluster):
     cluster.svc["db"] = make_svc()
     with pytest.raises(ds.DataServiceError, match="password variable"):
         ds.start_migration(NS, "db", "17")
+
+
+def test_mariadb_client_commands_work_in_mariadb_11_images():
+    pre = ds.env_prelude("mariadb")
+    assert "mariadb-dump" in pre and "mariadb-admin" in pre and "command -v mysql" in pre
+    assert "mariadb-dump" not in ds.env_prelude("mysql")
+
+
+def test_mysql_users_are_copied_by_hash_in_hex_not_through_text_output():
+    script = ds.copy_script("mysql", "old", "new")
+    assert "HEX(authentication_string)" in script and "SHOW CREATE USER" not in script
+
+
+def test_mariadb_users_keep_show_create_user_and_tolerate_existing_ones():
+    script = ds.copy_script("mariadb", "old", "new")
+    assert "SHOW CREATE USER" in script
+    assert "CREATE USER IF NOT EXISTS" in script
+    assert "CREATE USER IF NOT EXISTS" in ds.copy_script("mysql", "old", "new")

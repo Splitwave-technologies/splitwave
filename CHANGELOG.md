@@ -1,3 +1,11 @@
+## 0.1.5
+
+- **Database migration for passwords from `envFrom`.** When the database password comes from a Secret through `envFrom` (not from `env`), the copy and backup jobs now find it; previously the migration stopped with "password variable not found". Found on a production database.
+- **MySQL 8 migration keeps the users.** The password hash of a MySQL 8 account is no longer damaged while the accounts are copied (error 1827); the hash is transferred as hex.
+- **MariaDB 11 migration works.** The client images of MariaDB 11 and newer no longer contain `mysql`, `mysqldump` and `mysqladmin`; the jobs now use `mariadb`, `mariadb-dump` and `mariadb-admin` there. The same fix covers the backup before a version change.
+- **Built-in accounts are tolerated.** The copy no longer fails when the new instance already has an account created by the image (for example the `healthcheck` user of MariaDB).
+- Verified on a real cluster: PostgreSQL 16 to 17, MySQL 8.0 to 8.4, MariaDB 10.11 to 11.4 (data, accounts, switch-over and rollback), and MinIO to SeaweedFS.
+
 ## 0.1.4
 
 - **Data services.** A new card on the project page finds the databases and S3 storages in the environment namespace (PostgreSQL, MySQL, MariaDB, Redis, MinIO, SeaweedFS) and manages them: change the image version within the same major version (with an optional dump first), migrate a database to a newer major version side by side (new instance, dump copy, one-click switch-over, rollback at any moment, delete the old instance when sure), and copy an S3 storage into another one with verification. Needs `rbac.dataServices=true`. See `docs/data-services.md`.

@@ -233,7 +233,11 @@ def env_prelude(engine: str) -> str:
         return ('export PGUSER="${PGUSER:-${POSTGRES_USER:-${POSTGRESQL_USERNAME:-postgres}}}"; '
                 'export PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-${POSTGRESQL_PASSWORD:-}}}"; ')
     if engine in ("mysql", "mariadb"):
-        return 'export MYSQL_PWD="${MYSQL_PWD:-${MYSQL_ROOT_PASSWORD:-${MARIADB_ROOT_PASSWORD:-}}}"; '
+        pre = 'export MYSQL_PWD="${MYSQL_PWD:-${MYSQL_ROOT_PASSWORD:-${MARIADB_ROOT_PASSWORD:-}}}"; '
+        if engine == "mariadb":     # в образах MariaDB 11+ нет символических ссылок mysql, mysqldump, mysqladmin: оставлены только mariadb, mariadb-dump, mariadb-admin
+            pre += ('command -v mysql >/dev/null 2>&1 || { mysql() { mariadb "$@"; }; mysqldump() { mariadb-dump "$@"; }; '
+                    'mysqladmin() { mariadb-admin "$@"; }; }; ')
+        return pre
     if ENGINES.get(engine, {}).get("category") == "s3":
         return ('export RCLONE_CONFIG_SRC_ACCESS_KEY_ID="${RCLONE_CONFIG_SRC_ACCESS_KEY_ID:-${MINIO_ROOT_USER:-${MINIO_ACCESS_KEY:-${AWS_ACCESS_KEY_ID:-}}}}"; '
                 'export RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY="${RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY:-${MINIO_ROOT_PASSWORD:-${MINIO_SECRET_KEY:-${AWS_SECRET_ACCESS_KEY:-}}}}"; ')
@@ -342,14 +346,20 @@ def wait_script(engine: str, *hosts: str) -> str:
 _MYSQL_SYSTEM_USERS = "'root','mysql.sys','mysql.session','mysql.infoschema','mariadb.sys','mysql','debian-sys-maint'"
 
 
-def mysql_copy_script(src: str, dst: str, port: int) -> str:
+def mysql_copy_script(src: str, dst: str, port: int, engine: str = "mysql") -> str:
     """MySQL/MariaDB: базы пользователя (без служебных схем mysql, sys, performance_schema: их восстановление поверх живого сервера
     зависает на блокировке метаданных и ломает служебные таблицы новой версии) и учётные записи с правами (SHOW CREATE USER / SHOW GRANTS)."""
+    if engine == "mysql":
+        # SHOW CREATE USER в MySQL 8 отдаёт хэш с произвольными байтами соли: через текстовый вывод клиента он портится (ошибка 1827), поэтому хэш переносится в hex
+        create_user = (f"""mysql -h {src} -P {port} -N -B -e "SELECT CONCAT('CREATE USER IF NOT EXISTS ', QUOTE(user), '@', QUOTE(host), ' IDENTIFIED WITH ', QUOTE(plugin), """
+                       f"""IF(authentication_string = '', '', CONCAT(' AS 0x', HEX(authentication_string))), ';') FROM mysql.user WHERE user = '$u' AND host = '$h'" >> /tmp/users.sql""")
+    else:
+        create_user = f"""mysql -h {src} -P {port} -N -B -e "SHOW CREATE USER '$u'@'$h'" | sed "s/^CREATE USER /CREATE USER IF NOT EXISTS /; s/\$/;/" >> /tmp/users.sql"""
     return (wait_script("mysql", src, dst) + f"""
 DBS=$(mysql -h {src} -P {port} -N -B -e "SHOW DATABASES" | grep -Ev '^(mysql|information_schema|performance_schema|sys)$' | tr '\\n' ' ')
 : > /tmp/users.sql
 mysql -h {src} -P {port} -N -B -e "SELECT user, host FROM mysql.user WHERE user NOT IN ({_MYSQL_SYSTEM_USERS}) AND user <> ''" | while IFS="$(printf '\\t')" read -r u h; do
-  mysql -h {src} -P {port} -N -B -e "SHOW CREATE USER '$u'@'$h'" | sed 's/$/;/' >> /tmp/users.sql
+  {create_user}
   mysql -h {src} -P {port} -N -B -e "SHOW GRANTS FOR '$u'@'$h'" | sed 's/$/;/' >> /tmp/users.sql
 done
 {{ if [ -n "$DBS" ]; then mysqldump -h {src} -P {port} --databases $DBS --single-transaction --routines --events --triggers; fi; cat /tmp/users.sql; }} 2>/tmp/dump.err | mysql -h {dst} -P {port} >/dev/null 2>/tmp/restore.err
@@ -362,7 +372,7 @@ def copy_script(engine: str, src_host: str, dst_host: str) -> str:
     """Дамп → восстановление потоком. Ошибки «already exists» (служебные роли и базы нового экземпляра) допустимы, любые другие — сбой."""
     port = ENGINES[engine]["port"]
     if engine in ("mysql", "mariadb"):
-        return mysql_copy_script(src_host, dst_host, port)
+        return mysql_copy_script(src_host, dst_host, port, engine)
     return (wait_script(engine, src_host, dst_host) +
             f"{{ {dump_command(engine, src_host, port)} 2>/tmp/dump.err; }} | {restore_command(engine, dst_host, port)} >/dev/null 2>/tmp/restore.err; "
             "cat /tmp/dump.err /tmp/restore.err; "
