@@ -72,3 +72,19 @@ def test_same_revision_is_a_noop_and_new_revision_rebuilds(monkeypatch):
     assert _run_ret(monkeypatch, fake2, revision="newsha1") is True          # другой коммит: замена -> сборка
     assert "replace" in fake2.calls
     assert _run_ret(monkeypatch, FakeCustom(), revision="x") is True         # нет Image: создаём
+
+
+def test_wait_for_new_build_survives_transient_api_errors(monkeypatch):
+    from kubernetes.client.exceptions import ApiException
+    from app.services import kpack
+    calls = {"n": 0}
+
+    def status(slug, namespace=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ApiException(status=504, reason="Gateway Timeout")
+        return {"latest_image": "reg/x@sha256:new", "ready": True}
+    monkeypatch.setattr(kpack, "get_status", status)
+    monkeypatch.setattr(kpack.time, "sleep", lambda s: None)
+    assert kpack.wait_for_new_build("shop", "reg/x@sha256:old", "ns", timeout=60, interval=1) == "reg/x@sha256:new"
+    assert calls["n"] == 2

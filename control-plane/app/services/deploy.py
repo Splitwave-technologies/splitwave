@@ -2,7 +2,7 @@ import logging
 import time
 
 from app.config import settings
-from app.services.kubeclient import apps_v1_api, core_v1_api
+from app.services.kubeclient import apps_v1_api, call_retrying, core_v1_api
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def wait_rollout(deployment_name: str, container_name: str, image: str, namespac
     first_seen: dict = {}
     summary = ""
     while True:
-        dep = apps.read_namespaced_deployment(deployment_name, namespace)
+        dep = call_retrying(lambda: apps.read_namespaced_deployment(deployment_name, namespace), poll, sleep=sleep)
         st = dep.status
         want = 1 if dep.spec.replicas is None else dep.spec.replicas
         if want == 0:
@@ -103,7 +103,7 @@ def wait_rollout(deployment_name: str, container_name: str, image: str, namespac
         for c in ((st.conditions or []) if st else []):
             if c.type == "Progressing" and c.reason == "ProgressDeadlineExceeded":
                 raise RolloutError(f"ProgressDeadlineExceeded: {c.message or summary}")
-        pods = _new_pods(core, namespace, dep, container_name, image)
+        pods = call_retrying(lambda: _new_pods(core, namespace, dep, container_name, image), poll, sleep=sleep)
         for pod in pods:
             problem = _pod_problem(pod, container_name)
             if not problem:

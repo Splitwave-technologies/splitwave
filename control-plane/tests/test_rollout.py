@@ -172,3 +172,19 @@ def test_release_is_deployed_only_after_the_wait_succeeds(project, monkeypatch):
     db = SessionLocal()
     assert db.query(Release).one().status == "deployed" and seen == [True]
     db.close()
+
+
+def test_transient_api_error_while_waiting_does_not_fail_the_rollout(monkeypatch):
+    """Один 504 от API кластера (перегруженный узел) не должен считаться провалом выката."""
+    from kubernetes.client.exceptions import ApiException
+    apps = Apps([_dep(updated=2, available=2, total=2)])
+    real, calls = apps.read_namespaced_deployment, {"n": 0}
+
+    def flaky(name, namespace):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise ApiException(status=504, reason="Gateway Timeout")
+        return real(name, namespace)
+    apps.read_namespaced_deployment = flaky
+    _, clock = _wait(monkeypatch, apps, Core([_pod("p1"), _pod("p2")]))
+    assert calls["n"] == 3 and clock.t == 6          # два повтора с паузой опроса

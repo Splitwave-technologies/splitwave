@@ -1,4 +1,9 @@
+import logging
+import time
+
+import urllib3
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
 _loaded = False
 
@@ -72,3 +77,29 @@ def authorization_v1_api(cluster=None) -> client.AuthorizationV1Api:
         return client.AuthorizationV1Api(_remote(cluster))
     _ensure_loaded()
     return client.AuthorizationV1Api()
+
+
+logger = logging.getLogger(__name__)
+TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
+API_RETRIES = 12   # подряд идущих сбоев API (~минута при опросе раз в 5 с), после которых ошибка пробрасывается
+
+
+def is_transient(e: Exception) -> bool:
+    """Кратковременный сбой API кластера: перегрузка или таймаут шлюза, обрыв соединения (k3s на одном слабом узле)."""
+    if isinstance(e, ApiException):
+        return e.status in TRANSIENT_STATUSES
+    return isinstance(e, urllib3.exceptions.HTTPError)
+
+
+def call_retrying(call, wait: float = 5.0, retries: int = None, sleep=time.sleep):
+    """Вызов API кластера с повтором при кратковременных сбоях; постоянная ошибка (403, 404…) пробрасывается сразу.
+    Для циклов ожидания (сборка, выкат): один 504 не должен ронять длинную операцию."""
+    retries = API_RETRIES if retries is None else retries
+    for attempt in range(retries):
+        try:
+            return call()
+        except Exception as e:  # noqa: BLE001
+            if not is_transient(e) or attempt == retries - 1:
+                raise
+            logger.warning("transient cluster API error (%s), retry %d/%d", getattr(e, "status", type(e).__name__), attempt + 1, retries)
+            sleep(wait)

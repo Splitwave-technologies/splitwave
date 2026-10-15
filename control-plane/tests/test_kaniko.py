@@ -165,3 +165,48 @@ def test_failed_release_reason_is_visible_only_to_those_who_can_deploy(client, a
     db.commit(); db.close()
     assert client.get("/api/projects/shop/releases", headers=admin).json()[0]["error_message"] == "docker build failed: exit status 7"
     assert client.get("/api/projects/shop/releases", headers=make_token("viewer")).json()[0]["error_message"] is None
+
+
+def test_transient_api_errors_while_waiting_do_not_fail_the_build(client, admin, cluster, monkeypatch):
+    """Один 504 от API k3s (перегруженный узел) не должен ронять сборку: опрос повторяется."""
+    batch, core = cluster
+    batch.status = NS(succeeded=1, failed=None, conditions=[])
+    p, e, db = mk(client, admin)
+    real, calls = batch.read_namespaced_job_status, {"n": 0}
+
+    def flaky(name, ns):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise ApiException(status=504, reason="Gateway Timeout")
+        return real(name, ns)
+    monkeypatch.setattr(batch, "read_namespaced_job_status", flaky)
+    assert kaniko.build_image(p, e, "https://h/a.git", "d" * 40, poll_seconds=0)== f"registry.example.com/team/shop@{core.digest}"
+    assert calls["n"] == 4
+
+
+def test_permanent_api_error_while_waiting_is_raised_at_once(client, admin, cluster, monkeypatch):
+    batch, core = cluster
+    p, e, db = mk(client, admin)
+    calls = {"n": 0}
+
+    def forbidden(name, ns):
+        calls["n"] += 1
+        raise ApiException(status=403, reason="Forbidden")
+    monkeypatch.setattr(batch, "read_namespaced_job_status", forbidden)
+    with pytest.raises(ApiException):
+        kaniko.build_image(p, e, "https://h/a.git", "f" * 40, poll_seconds=0)
+    assert calls["n"] == 1
+
+
+def test_endless_transient_errors_give_up_after_the_retry_limit(client, admin, cluster, monkeypatch):
+    batch, core = cluster
+    p, e, db = mk(client, admin)
+    calls = {"n": 0}
+
+    def down(name, ns):
+        calls["n"] += 1
+        raise ApiException(status=504, reason="Gateway Timeout")
+    monkeypatch.setattr(batch, "read_namespaced_job_status", down)
+    with pytest.raises(ApiException):
+        kaniko.build_image(p, e, "https://h/a.git", "9" * 40, poll_seconds=0)
+    assert calls["n"] == kaniko.API_RETRIES

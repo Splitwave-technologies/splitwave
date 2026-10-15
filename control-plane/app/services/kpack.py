@@ -5,6 +5,7 @@ from typing import Optional
 from kubernetes.client.exceptions import ApiException
 
 from app.config import settings
+from app.services import kubeclient
 from app.services.kubeclient import custom_objects_api
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,7 @@ def wait_for_new_build(project_slug: str, previous_image: Optional[str], namespa
     interval = interval or settings.build_poll_interval_seconds
     deadline = time.time() + timeout
     while time.time() < deadline:
-        st = get_status(project_slug, namespace)
+        st = kubeclient.call_retrying(lambda: get_status(project_slug, namespace), interval)
         if st["ready"] and st["latest_image"] and st["latest_image"] != previous_image:
             return st["latest_image"]
         time.sleep(interval)

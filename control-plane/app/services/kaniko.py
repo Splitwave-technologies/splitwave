@@ -95,6 +95,13 @@ def job_body(project, image_name: str, namespace: str, git_url: str, revision: s
     }
 
 
+API_RETRIES = kubeclient.API_RETRIES
+
+
+def _api(call, wait: float):
+    return kubeclient.call_retrying(call, wait)
+
+
 def _tail(core, namespace: str, job: str, lines: int = 25) -> str:
     out = []
     try:
@@ -121,9 +128,9 @@ def build_image(project, env, git_url: str, revision: str, poll_seconds: float =
     logger.info("kaniko job %s/%s started for %s@%s", namespace, name, image_name, revision[:12])
     deadline = time.monotonic() + settings.build_timeout_seconds + DEADLINE_GRACE
     while time.monotonic() < deadline:
-        st = batch.read_namespaced_job_status(name, namespace).status
+        st = _api(lambda: batch.read_namespaced_job_status(name, namespace), poll_seconds).status
         if st.succeeded:
-            for pod in core.list_namespaced_pod(namespace, label_selector=f"job-name={name}").items:
+            for pod in _api(lambda: core.list_namespaced_pod(namespace, label_selector=f"job-name={name}"), poll_seconds).items:
                 for cs in pod.status.container_statuses or []:
                     if cs.name == "kaniko" and cs.state and cs.state.terminated and (cs.state.terminated.message or "").strip().startswith("sha256:"):
                         return f"{registry_tag(project, image_name)}@{cs.state.terminated.message.strip()}"
