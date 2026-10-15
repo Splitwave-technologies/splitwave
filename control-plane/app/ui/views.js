@@ -424,7 +424,7 @@ export async function projectView(root, ctx, slug, envName) {
             h("option", { value: "buildpacks" }, t("methodBuildpacks")), h("option", { value: "dockerfile" }, "Dockerfile"));
           methodSel.value = src.build_method;
           const dfIn = h("input", { "aria-label": t("dockerfilePath"), value: src.dockerfile_path, "data-testid": "src-dockerfile" });
-          rows.push(h("div", { class: "row" }, methodSel, dfIn, h("button", { class: "btn small", type: "button", "data-testid": "src-method-save", onclick: async () => {
+          rows.push(h("div", { class: "row fields" }, h("div", { class: "field" }, h("label", {}, t("buildMethod")), methodSel), h("div", { class: "field" }, h("label", {}, t("dockerfilePath")), dfIn), h("button", { class: "btn small", type: "button", "data-testid": "src-method-save", onclick: async () => {
             try { await api(base, { method: "PATCH", body: { build_method: methodSel.value, dockerfile_path: dfIn.value.trim() || "Dockerfile" } }); toast(t("policySaved"), "ok"); loadSource(); } catch (e) { toast(e.message, "bad"); }
           } }, t("save"))));
           if (src.dockerfile_generated) {
@@ -441,7 +441,7 @@ export async function projectView(root, ctx, slug, envName) {
                 } }, t("useRepoDockerfile")))));
           }
           const tokIn = h("input", { type: "password", "aria-label": t("gitToken"), autocomplete: "new-password", "data-testid": "src-token" });
-          rows.push(h("div", { class: "row" }, tokIn, h("button", { class: "btn small", type: "button", "data-testid": "src-token-save", onclick: async () => {
+          rows.push(h("div", { class: "row fields" }, h("div", { class: "field" }, h("label", {}, t("gitToken")), tokIn), h("button", { class: "btn small", type: "button", "data-testid": "src-token-save", onclick: async () => {
             try { await api(`${base}/git-token`, { method: "PUT", body: { token: tokIn.value.trim() || null } }); toast(t("policySaved"), "ok"); loadSource(); } catch (e) { toast(e.message, "bad"); }
           } }, t("save"))));
           const wh = await api(`${base}/webhook`);
@@ -476,10 +476,10 @@ export async function projectView(root, ctx, slug, envName) {
             try { await api(`${base}/previews/${enc(p.pr)}`, { method: "DELETE" }); toast(t("envDeleted"), "ok"); loadPreviews(); } catch (e) { toast(e.message, "bad"); }
           } }, t("delete")) : null))))) : h("div", { class: "empty" }, t("previewNone"));
         pvBody.replaceChildren(h("div", { class: "card-body" }, h("p", { class: "muted small" }, t("previewNote", { n: r.limit, h: r.ttl_hours })),
-          canManage ? h("div", { class: "form-grid" }, h("label", { class: "check" }, en, " ", t("previewEnable")), field2(t("previewBase"), baseSel),
-            h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", "data-testid": "pv-save", onclick: async () => {
+          canManage ? h("div", { class: "row fields" }, h("label", { class: "check" }, en, " ", t("previewEnable")), field2(t("previewBase"), baseSel),
+            h("button", { class: "btn primary", type: "button", "data-testid": "pv-save", onclick: async () => {
               try { await api(`${base}/previews`, { method: "PUT", body: { enabled: en.checked, base_env: baseSel.value } }); toast(t("policySaved"), "ok"); loadPreviews(); } catch (e) { toast(e.message, "bad"); }
-            } }, t("save")))) : null), list);
+            } }, t("save"))) : null), list);
       } catch (e) { pvBody.replaceChildren(errorBox(e)); }
     })();
   }
@@ -571,8 +571,8 @@ export async function projectView(root, ctx, slug, envName) {
   /* опасная зона */
   if (ctx.can("projects:manage")) {
     const cleanup = h("input", { type: "checkbox", "data-testid": "delete-project-cluster" });
-    root.append(card(t("dangerZone"), h("div", { class: "card-body row" }, h("p", { class: "muted small" }, t("deleteProjectHint")), h("span", { class: "spacer" }),
-      h("label", { class: "small" }, cleanup, " ", t("deleteProjectCluster")), " ",
+    root.append(card(t("dangerZone"), h("div", { class: "card-body danger-row" }, h("p", { class: "muted small" }, t("deleteProjectHint")),
+      h("div", { class: "danger-actions" }, h("label", { class: "check small" }, cleanup, t("deleteProjectCluster")),
       h("button", { class: "btn danger", type: "button", "data-testid": "delete-project", onclick: async () => {
         const withCluster = cleanup.checked;
         if (!(await confirmDialog({ title: t("deleteProject"), message: withCluster ? t("deleteProjectClusterHint") : t("deleteProjectHint"), danger: true, confirmLabel: t("delete"), expect: slug }))) return;
@@ -581,7 +581,7 @@ export async function projectView(root, ctx, slug, envName) {
           const failed = r && r.cluster && r.cluster.failed && r.cluster.failed.length;
           toast(failed ? t("projectDeletedClusterFailed") : t("projectDeleted"), failed ? "bad" : "ok"); location.hash = "#/projects";
         } catch (e) { toast(e.message, "bad"); }
-      } }, t("deleteProject")))));
+      } }, t("deleteProject"))))));
   }
 }
 

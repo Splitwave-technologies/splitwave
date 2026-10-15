@@ -73,9 +73,12 @@ export function dataServicesCard(slug, envName, ctx) {
         if (await call(`/${enc(s.name)}/migration/finalize`, { method: "POST", body: { confirm: s.name } }, t("dsFinalized"))) load();
       }, "danger"));
     }
-    return h("div", { class: "row", "data-testid": `ds-migration-${s.name}` }, badge(m.phase, kind), " ",
-      h("span", { class: "small" }, m.kind === "s3" ? `→ ${m.dest_endpoint}` : `${m.from_tag} → ${m.to_tag}`), " ", h("span", { class: "muted small" }, m.message || ""),
-      h("span", { class: "spacer" }), act, m.log ? h("pre", { class: "mono small", style: "width:100%;max-height:12em;overflow:auto" }, m.log) : null);
+    return h("div", { class: "ds-mig", "data-testid": `ds-migration-${s.name}` },
+      h("div", { class: "ds-mig-info" },
+        h("div", { class: "ds-title" }, badge(m.phase, kind), h("span", { class: "small" }, m.kind === "s3" ? `→ ${m.dest_endpoint}` : `${m.from_tag} → ${m.to_tag}`)),
+        m.message ? h("div", { class: "muted small" }, m.message) : null),
+      act.length ? h("div", { class: "ds-actions" }, act) : null,
+      m.log ? h("pre", { class: "mono small ds-log" }, m.log) : null);
   }
 
   async function load() {
@@ -94,13 +97,14 @@ export function dataServicesCard(slug, envName, ctx) {
     if (!root.isConnected) return;
     if (!data.services.length) { body.replaceChildren(h("div", { class: "empty" }, t("dsNone"))); return; }
     body.replaceChildren(...data.services.map((s) => h("div", { class: "ds-item", "data-testid": `ds-${s.name}` },
-      h("div", { class: "row" }, h("strong", {}, s.name), " ", badge(s.label, "pro"), " ", h("span", { class: "mono small" }, s.image), " ",
-        badge(`${s.ready}/${s.replicas ?? "?"}`, s.ready >= (s.replicas || 1) ? "ok" : "warn"), " ",
-        s.volumes.map((v) => h("span", { class: "muted small" }, `${v.name} ${v.size || ""} `)), h("span", { class: "spacer" }),
-        canManage && !(s.migration && ACTIVE.includes(s.migration.phase)) ? [
-          h("button", { class: "btn small", type: "button", "data-testid": `ds-version-${s.name}`, onclick: () => versionDialog(s) }, t("dsChangeVersion")), " ",
+      h("div", { class: "ds-head" },
+        h("div", { class: "ds-info" },
+          h("div", { class: "ds-title" }, h("strong", {}, s.name), badge(s.label, "pro"), badge(`${s.ready}/${s.replicas ?? "?"}`, s.ready >= (s.replicas || 1) ? "ok" : "warn")),
+          h("div", { class: "ds-meta" }, h("span", { class: "mono small" }, s.image), s.volumes.map((v) => h("span", { class: "muted small" }, `${v.name} ${v.size || ""}`)))),
+        canManage && !(s.migration && ACTIVE.includes(s.migration.phase)) ? h("div", { class: "ds-actions" },
+          h("button", { class: "btn small", type: "button", "data-testid": `ds-version-${s.name}`, onclick: () => versionDialog(s) }, t("dsChangeVersion")),
           s.category === "database" && s.workload === "StatefulSet" ? h("button", { class: "btn small", type: "button", "data-testid": `ds-migrate-${s.name}`, onclick: () => migrateDialog(s) }, t("dsMigrate")) : null,
-          s.category === "s3" ? h("button", { class: "btn small", type: "button", "data-testid": `ds-s3-${s.name}`, onclick: () => s3Dialog(s) }, t("dsS3Copy")) : null] : null),
+          s.category === "s3" ? h("button", { class: "btn small", type: "button", "data-testid": `ds-s3-${s.name}`, onclick: () => s3Dialog(s) }, t("dsS3Copy")) : null) : null),
       s.migration && !["finalized"].includes(s.migration.phase) ? migrationPanel(s) : null)));
     if (data.services.some((s) => s.migration && ACTIVE.includes(s.migration.phase))) timer = setTimeout(load, 5000);
   }

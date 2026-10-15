@@ -92,6 +92,6 @@ export function envImportCard({ slug, environment, onDone }) {
 
   return h("section", { class: "card", "data-testid": "envimp" }, h("div", { class: "card-head" }, h("span", { class: "card-title" }, t("envImport"))),
     h("div", { class: "card-body stack" }, h("p", { class: "muted small" }, t("envImportNote")),
-      h("div", { class: "form-grid" }, field(t("envSource"), modeSel), field(t("scope"), scope), field(t("envOverwrite"), h("label", { class: "row" }, overwrite, h("span", { class: "small" }, t("envOverwriteHint"))))),
+      h("div", { class: "form-grid" }, field(t("envSource"), modeSel), field(t("scope"), scope), field(t("envOverwrite"), h("label", { class: "check" }, overwrite, h("span", { class: "small" }, t("envOverwriteHint"))))),
       uploadBox, repoBox, h("div", { class: "row" }, previewBtn, applyBtn), out));
 }
